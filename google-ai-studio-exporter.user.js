@@ -2,7 +2,7 @@
 // @name         Google AI Studio Exporter
 // @name:zh-CN   Google AI Studio 对话导出器
 // @namespace    https://github.com/GhostXia/Google-AI-Studio-Exporter
-// @version      1.2.1
+// @version      1.3.0
 // @description  Export your Gemini chat history from Google AI Studio to a text file. Features: Auto-scrolling, User/Model role differentiation, clean output, and full mobile optimization.
 // @description:zh-CN 完美导出 Google AI Studio 对话记录。具备自动滚动加载、精准去重、防抖动、User/Model角色区分，以及全平台响应式优化。支持 PC、平板、手机全平台。
 // @author       GhostXia
@@ -28,6 +28,7 @@
             'btn_export': '🚀 导出',
             'title_ready': '准备就绪',
             'status_init': '初始化中...',
+            'btn_save': '💾 保存',
             'btn_close': '关闭',
             'title_countdown': '准备开始',
             'status_countdown': '请松开鼠标，不要操作！<br><span class="ai-red">{s} 秒后开始自动滚动</span>',
@@ -48,6 +49,7 @@
             'btn_export': '🚀 Export',
             'title_ready': 'Ready',
             'status_init': 'Initializing...',
+            'btn_save': '💾 Save',
             'btn_close': 'Close',
             'title_countdown': 'Get Ready',
             'status_countdown': 'Please release mouse!<br><span class="ai-red">Auto-scroll starts in {s}s</span>',
@@ -134,6 +136,13 @@
             font-variant-numeric: tabular-nums;
         }
         
+        .ai-btn-container {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        
         .ai-btn {
             background: linear-gradient(135deg, #1a73e8 0%, #1557b0 100%);
             color: white; 
@@ -143,10 +152,19 @@
             cursor: pointer; 
             font-size: 16px; 
             font-weight: 600;
-            margin-top: 20px; 
             display: none;
             box-shadow: 0 4px 12px rgba(26, 115, 232, 0.3);
             transition: all 0.2s ease;
+            flex: 1;
+            max-width: 150px;
+        }
+        
+        .ai-btn-secondary {
+            background: linear-gradient(135deg, #5f6368 0%, #3c4043 100%);
+        }
+        
+        .ai-btn-secondary:hover {
+            background: linear-gradient(135deg, #4a4d51 0%, #2d3033 100%);
         }
         
         .ai-btn:hover { 
@@ -330,7 +348,10 @@
                 <div class="ai-title">${t('title_ready')}</div>
                 <div class="ai-status">${t('status_init')}</div>
                 <div class="ai-count">0</div>
-                <button id="ai-close-btn" class="ai-btn">${t('btn_close')}</button>
+                <div class="ai-btn-container">
+                    <button id="ai-save-btn" class="ai-btn">${t('btn_save')}</button>
+                    <button id="ai-close-btn" class="ai-btn ai-btn-secondary">${t('btn_close')}</button>
+                </div>
             </div>
         `;
         document.body.appendChild(overlay);
@@ -339,13 +360,30 @@
         statusEl = overlay.querySelector('.ai-status');
         countEl = overlay.querySelector('.ai-count');
         closeBtn = overlay.querySelector('#ai-close-btn');
+        const saveBtn = overlay.querySelector('#ai-save-btn');
 
         closeBtn.onclick = () => { overlay.style.display = 'none'; };
+        saveBtn.onclick = () => {
+            // 重新下载文件
+            if (collectedData.size > 0) {
+                let content = t('file_header') + "\n";
+                content += `${t('file_time')}: ${new Date().toLocaleString()}\n`;
+                content += `${t('file_count')}: ${collectedData.size}\n`;
+                content += "========================================\n\n";
+                for (const [id, item] of collectedData) {
+                    content += `### ${item.role === 'Gemini' ? t('role_gemini') : t('role_user')}:\n${item.text}\n`;
+                    content += `----------------------------------------------------------------\n\n`;
+                }
+                download(content, `Gemini_Chat_v14_${Date.now()}.txt`);
+            }
+        };
     }
 
     function updateUI(state, msg = "") {
         initUI();
-        closeBtn.style.display = 'none';
+        const saveBtn = overlay.querySelector('#ai-save-btn');
+        const btnContainer = overlay.querySelector('.ai-btn-container');
+        btnContainer.style.display = 'none';
 
         if (state === 'COUNTDOWN') {
             titleEl.innerText = t('title_countdown');
@@ -359,10 +397,13 @@
             titleEl.innerText = t('title_finished');
             statusEl.innerHTML = t('status_finished');
             countEl.innerText = msg;
+            btnContainer.style.display = 'flex';
+            saveBtn.style.display = 'inline-block';
             closeBtn.style.display = 'inline-block';
         } else if (state === 'ERROR') {
             titleEl.innerText = t('title_error');
             statusEl.innerHTML = `<span class="ai-red">${msg}</span>`;
+            btnContainer.style.display = 'flex';
             closeBtn.style.display = 'inline-block';
         }
     }
