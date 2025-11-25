@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Google AI Studio Exporter
-// @name:zh-CN   Google AI Studio 对话导出器
+// @name         Google AI Studio Exporter (Responsive Pro)
+// @name:zh-CN   Google AI Studio 对话导出器 (全平台优化版)
 // @namespace    https://github.com/GhostXia/Google-AI-Studio-Exporter
-// @version      1.1.0
+// @version      1.0.0-rc1
 // @description  Export your Gemini chat history from Google AI Studio to a text file. Features: Auto-scrolling, User/Model role differentiation, clean output, and full mobile optimization.
 // @description:zh-CN 完美导出 Google AI Studio 对话记录。具备自动滚动加载、精准去重、防抖动、User/Model角色区分，以及全平台响应式优化。支持 PC、平板、手机全平台。
 // @author       GhostXia
@@ -11,8 +11,8 @@
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=google.com
 // @homepageURL  https://github.com/GhostXia/Google-AI-Studio-Exporter
 // @supportURL   https://github.com/GhostXia/Google-AI-Studio-Exporter/issues
-// @downloadURL  https://github.com/GhostXia/Google-AI-Studio-Exporter/raw/main/google-ai-studio-exporter.user.js
-// @updateURL    https://github.com/GhostXia/Google-AI-Studio-Exporter/raw/main/google-ai-studio-exporter.user.js
+// @downloadURL  https://github.com/GhostXia/Google-AI-Studio-Exporter/raw/main/google-ai-studio-exporter.responsive.user.js
+// @updateURL    https://github.com/GhostXia/Google-AI-Studio-Exporter/raw/main/google-ai-studio-exporter.responsive.user.js
 // @grant        none
 // ==/UserScript==
 
