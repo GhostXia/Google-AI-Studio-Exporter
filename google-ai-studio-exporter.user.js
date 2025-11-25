@@ -1,14 +1,18 @@
 // ==UserScript==
-// @name         Google AI Studio 导出助手 (v14.0 主动探测版)
-// @namespace    http://tampermonkey.net/
-// @version      14.0
-// @description  增加主动探测机制，解决冷启动时找不到滚动条的问题。保留单次下载锁和v10精准算法。
-// @author       You
+// @name         Google AI Studio Exporter
+// @name:zh-CN   Google AI Studio 对话导出器
+// @namespace    https://github.com/GhostXia/Google-AI-Studio-Exporter
+// @version      1.0.0
+// @description  Export your Gemini chat history from Google AI Studio to a text file. Features: Auto-scrolling, User/Model role differentiation, and clean output.
+// @description:zh-CN 完美导出 Google AI Studio 对话记录。具备自动滚动加载、精准去重、防抖动、User/Model角色区分等功能。
+// @author       GhostXia
+// @license      MIT
 // @match        https://aistudio.google.com/*
+// @icon         https://www.google.com/s2/favicons?sz=64&domain=google.com
 // @grant        none
 // ==/UserScript==
 
-(function() {
+(function () {
     'use strict';
 
     // ==========================================
@@ -61,7 +65,7 @@
     // 3. UI 逻辑
     // ==========================================
     function createEntryButton() {
-        if(document.getElementById('ai-entry-btn-v14')) return;
+        if (document.getElementById('ai-entry-btn-v14')) return;
         const btn = document.createElement('button');
         btn.id = 'ai-entry-btn-v14';
         btn.className = 'ai-entry';
@@ -71,7 +75,7 @@
     }
 
     function initUI() {
-        if(document.getElementById('ai-overlay-v14')) {
+        if (document.getElementById('ai-overlay-v14')) {
             overlay.style.display = 'flex';
             return;
         }
@@ -86,19 +90,19 @@
             </div>
         `;
         document.body.appendChild(overlay);
-        
+
         titleEl = overlay.querySelector('.ai-title');
         statusEl = overlay.querySelector('.ai-status');
         countEl = overlay.querySelector('.ai-count');
         closeBtn = overlay.querySelector('#ai-close-btn');
-        
+
         closeBtn.onclick = () => { overlay.style.display = 'none'; };
     }
 
     function updateUI(state, msg = "") {
         initUI();
         closeBtn.style.display = 'none';
-        
+
         if (state === 'COUNTDOWN') {
             titleEl.innerText = "准备开始";
             statusEl.innerHTML = `请松开鼠标，不要操作！<br><span class="ai-red">${msg} 秒后开始自动滚动</span>`;
@@ -127,8 +131,8 @@
         isRunning = true;
         hasFinished = false;
         collectedData.clear();
-        
-        for(let i=3; i>0; i--) {
+
+        for (let i = 3; i > 0; i--) {
             updateUI('COUNTDOWN', i);
             await sleep(1000);
         }
@@ -136,7 +140,7 @@
         // --- 核心修复：主动探测 + 精准定位 ---
         // 先尝试用 v10 逻辑找
         let scroller = findRealScroller();
-        
+
         // 如果找不到，或者找到了但看起来不能滚 (scrollTopMax为0)，进行主动激活
         if (!scroller || scroller.scrollHeight <= scroller.clientHeight) {
             console.log("尝试主动激活滚动容器...");
@@ -157,7 +161,7 @@
         await sleep(1500);
 
         // 滚动循环
-        let lastScrollTop = -9999; 
+        let lastScrollTop = -9999;
         let stuckCount = 0;
 
         try {
@@ -173,7 +177,7 @@
 
                 // 3. 检查到底
                 const currentScroll = scroller.scrollTop;
-                
+
                 // 允许 2px 误差
                 if (Math.abs(currentScroll - lastScrollTop) <= 2) {
                     stuckCount++;
@@ -200,7 +204,7 @@
     // ==========================================
     // 5. 辅助功能
     // ==========================================
-    
+
     function endProcess(status, msg) {
         if (hasFinished) return;
         hasFinished = true;
@@ -211,7 +215,7 @@
             content += `时间: ${new Date().toLocaleString()}\n`;
             content += `条数: ${collectedData.size}\n`;
             content += "========================================\n\n";
-            
+
             for (const [id, item] of collectedData) {
                 content += `### ${item.role}:\n${item.text}\n`;
                 content += `----------------------------------------------------------------\n\n`;
@@ -248,25 +252,25 @@
         const turns = document.querySelectorAll('ms-chat-turn');
         turns.forEach(turn => {
             if (!turn.id || collectedData.has(turn.id)) return;
-            
+
             const role = (turn.querySelector('[data-turn-role="Model"]') || turn.innerHTML.includes('model-prompt-container')) ? "Gemini" : "User";
-            
+
             const clone = turn.cloneNode(true);
             const trash = ['.actions-container', '.turn-footer', 'button', 'mat-icon', 'ms-grounding-sources', 'ms-search-entry-point'];
             trash.forEach(s => clone.querySelectorAll(s).forEach(e => e.remove()));
-            
+
             let text = clone.innerText
                 .replace(/edit\s*more_vert/gi, '')
                 .replace(/more_vert/gi, '')
                 .replace(/Run\s*Delete/gi, '')
                 .trim();
-            
-            if (text.length > 0) collectedData.set(turn.id, {role, text});
+
+            if (text.length > 0) collectedData.set(turn.id, { role, text });
         });
     }
 
     function download(text, name) {
-        const blob = new Blob([text], {type: 'text/plain;charset=utf-8'});
+        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
