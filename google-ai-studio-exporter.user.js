@@ -2,7 +2,7 @@
 // @name         Google AI Studio Exporter
 // @name:zh-CN   Google AI Studio 对话导出器
 // @namespace    https://github.com/GhostXia/Google-AI-Studio-Exporter
-// @version      1.1.1
+// @version      1.1.2
 // @description  Export your Gemini chat history from Google AI Studio to a text file. Features: Auto-scrolling, User/Model role differentiation, clean output, and full mobile optimization.
 // @description:zh-CN 完美导出 Google AI Studio 对话记录。具备自动滚动加载、精准去重、防抖动、User/Model角色区分，以及全平台响应式优化。支持 PC、平板、手机全平台。
 // @author       GhostXia
@@ -410,27 +410,52 @@
 
         updateUI('SCROLLING', 0);
 
-        // 移动端增强回到顶部逻辑 - 多次尝试
+        // 移动端增强回到顶部逻辑 - 验证循环
         console.log("回到顶部，当前 scrollTop:", scroller.scrollTop);
 
-        // 第一次尝试：直接设置
-        scroller.scrollTop = 0;
-        await sleep(300);
+        // 多次尝试并验证，最多 5 次
+        let scrollAttempts = 0;
+        const maxAttempts = 5;
 
-        // 第二次尝试：使用 scrollTo
-        if (scroller.scrollTop > 50) {
-            scroller.scrollTo({ top: 0, behavior: 'instant' });
-            await sleep(300);
+        while (scroller.scrollTop > 10 && scrollAttempts < maxAttempts) {
+            scrollAttempts++;
+            console.log(`第 ${scrollAttempts} 次尝试回到顶部...`);
+
+            // 方法 1: 直接设置
+            scroller.scrollTop = 0;
+            await sleep(400);
+
+            // 方法 2: scrollTo
+            if (scroller.scrollTop > 10) {
+                scroller.scrollTo({ top: 0, behavior: 'instant' });
+                await sleep(400);
+            }
+
+            // 方法 3: 强制向上滚动
+            if (scroller.scrollTop > 10) {
+                scroller.scrollBy({ top: -99999, behavior: 'instant' });
+                await sleep(400);
+            }
+
+            console.log(`尝试后 scrollTop: ${scroller.scrollTop}`);
         }
 
-        // 第三次尝试：强制触发
-        if (scroller.scrollTop > 50) {
-            scroller.scrollBy({ top: -99999, behavior: 'instant' });
-            await sleep(300);
+        if (scroller.scrollTop > 100) {
+            console.warn("警告：未能完全回到顶部，当前位置:", scroller.scrollTop);
+        } else {
+            console.log("✓ 成功回到顶部，当前 scrollTop:", scroller.scrollTop);
         }
 
-        console.log("回到顶部完成，当前 scrollTop:", scroller.scrollTop);
-        await sleep(900);
+        // 额外等待，确保页面渲染稳定
+        await sleep(800);
+
+        // 最后一次确认并修正
+        if (scroller.scrollTop > 10) {
+            console.log("最后修正，scrollTop:", scroller.scrollTop);
+            scroller.scrollTop = 0;
+            await sleep(500);
+        }
+
 
 
         let lastScrollTop = -9999;
