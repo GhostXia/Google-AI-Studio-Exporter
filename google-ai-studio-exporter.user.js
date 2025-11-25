@@ -16,6 +16,59 @@
     'use strict';
 
     // ==========================================
+    // 0. 国际化 (i18n)
+    // ==========================================
+    const lang = navigator.language.startsWith('zh') ? 'zh' : 'en';
+    const translations = {
+        'zh': {
+            'btn_export': '🚀 导出对话 (v14)',
+            'title_ready': '准备就绪',
+            'status_init': '初始化中...',
+            'btn_close': '关闭窗口',
+            'title_countdown': '准备开始',
+            'status_countdown': '请松开鼠标，不要操作！<br><span class="ai-red">{s} 秒后开始自动滚动</span>',
+            'title_scrolling': '正在采集...',
+            'status_scrolling': '正在向下滚动并抓取内容。<br>按 <b>ESC</b> 键可强制停止并保存。',
+            'title_finished': '🎉 导出成功',
+            'status_finished': '文件已生成。<br>请检查下载栏。',
+            'title_error': '❌ 出错了',
+            'file_header': 'Google AI Studio 完整对话记录',
+            'file_time': '时间',
+            'file_count': '条数',
+            'role_user': 'User',
+            'role_gemini': 'Gemini',
+            'err_no_scroller': '未找到滚动容器。请尝试刷新页面或手动滚动一下再试。',
+            'err_runtime': '运行错误: '
+        },
+        'en': {
+            'btn_export': '🚀 Export Chat (v14)',
+            'title_ready': 'Ready',
+            'status_init': 'Initializing...',
+            'btn_close': 'Close',
+            'title_countdown': 'Get Ready',
+            'status_countdown': 'Please release mouse!<br><span class="ai-red">Auto-scroll starts in {s}s</span>',
+            'title_scrolling': 'Exporting...',
+            'status_scrolling': 'Scrolling down and capturing content.<br>Press <b>ESC</b> to stop and save.',
+            'title_finished': '🎉 Finished',
+            'status_finished': 'File generated.<br>Check your downloads.',
+            'title_error': '❌ Error',
+            'file_header': 'Google AI Studio Chat History',
+            'file_time': 'Time',
+            'file_count': 'Count',
+            'role_user': 'User',
+            'role_gemini': 'Gemini',
+            'err_no_scroller': 'Scroll container not found. Try refreshing or scrolling manually.',
+            'err_runtime': 'Runtime Error: '
+        }
+    };
+
+    function t(key, param) {
+        let str = translations[lang][key] || key;
+        if (param !== undefined) str = str.replace('{s}', param);
+        return str;
+    }
+
+    // ==========================================
     // 1. 样式与 UI (保持 v13)
     // ==========================================
     const style = document.createElement('style');
@@ -69,7 +122,7 @@
         const btn = document.createElement('button');
         btn.id = 'ai-entry-btn-v14';
         btn.className = 'ai-entry';
-        btn.innerHTML = '🚀 导出对话 (v14)';
+        btn.innerHTML = t('btn_export');
         btn.onclick = startProcess;
         document.body.appendChild(btn);
     }
@@ -83,10 +136,10 @@
         overlay.id = 'ai-overlay-v14';
         overlay.innerHTML = `
             <div id="ai-box">
-                <div class="ai-title">准备就绪</div>
-                <div class="ai-status">初始化中...</div>
+                <div class="ai-title">${t('title_ready')}</div>
+                <div class="ai-status">${t('status_init')}</div>
                 <div class="ai-count">0</div>
-                <button id="ai-close-btn" class="ai-btn">关闭窗口</button>
+                <button id="ai-close-btn" class="ai-btn">${t('btn_close')}</button>
             </div>
         `;
         document.body.appendChild(overlay);
@@ -104,20 +157,20 @@
         closeBtn.style.display = 'none';
 
         if (state === 'COUNTDOWN') {
-            titleEl.innerText = "准备开始";
-            statusEl.innerHTML = `请松开鼠标，不要操作！<br><span class="ai-red">${msg} 秒后开始自动滚动</span>`;
+            titleEl.innerText = t('title_countdown');
+            statusEl.innerHTML = t('status_countdown', msg);
             countEl.innerText = "0";
         } else if (state === 'SCROLLING') {
-            titleEl.innerText = "正在采集...";
-            statusEl.innerHTML = `正在向下滚动并抓取内容。<br>按 <b>ESC</b> 键可强制停止并保存。`;
+            titleEl.innerText = t('title_scrolling');
+            statusEl.innerHTML = t('status_scrolling');
             countEl.innerText = msg;
         } else if (state === 'FINISHED') {
-            titleEl.innerText = "🎉 导出成功";
-            statusEl.innerHTML = `文件已生成。<br>请检查下载栏。`;
+            titleEl.innerText = t('title_finished');
+            statusEl.innerHTML = t('status_finished');
             countEl.innerText = msg;
             closeBtn.style.display = 'inline-block';
         } else if (state === 'ERROR') {
-            titleEl.innerText = "❌ 出错了";
+            titleEl.innerText = t('title_error');
             statusEl.innerHTML = `<span class="ai-red">${msg}</span>`;
             closeBtn.style.display = 'inline-block';
         }
@@ -151,7 +204,7 @@
         }
 
         if (!scroller) {
-            endProcess("ERROR", "未找到滚动容器。请尝试刷新页面或手动滚动一下再试。");
+            endProcess("ERROR", t('err_no_scroller'));
             return;
         }
 
@@ -194,7 +247,7 @@
             }
         } catch (e) {
             console.error(e);
-            endProcess("ERROR", "运行错误: " + e.message);
+            endProcess("ERROR", t('err_runtime') + e.message);
             return;
         }
 
@@ -211,13 +264,13 @@
         isRunning = false;
 
         if (status === "FINISHED") {
-            let content = "Google AI Studio 完整对话记录\n";
-            content += `时间: ${new Date().toLocaleString()}\n`;
-            content += `条数: ${collectedData.size}\n`;
+            let content = t('file_header') + "\n";
+            content += `${t('file_time')}: ${new Date().toLocaleString()}\n`;
+            content += `${t('file_count')}: ${collectedData.size}\n`;
             content += "========================================\n\n";
 
             for (const [id, item] of collectedData) {
-                content += `### ${item.role}:\n${item.text}\n`;
+                content += `### ${item.role === 'Gemini' ? t('role_gemini') : t('role_user')}:\n${item.text}\n`;
                 content += `----------------------------------------------------------------\n\n`;
             }
             download(content, `Gemini_Chat_v14_${Date.now()}.txt`);
