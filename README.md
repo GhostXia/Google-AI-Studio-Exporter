@@ -26,7 +26,9 @@ This UserScript solves the problem of "Virtual Scrolling" in Google AI Studio, a
 
 ## 📦 Installation (安装方法)
 
-1.  Install a userscript manager like **Tampermonkey** (Chrome/Edge/Firefox).
+1.  Install the **OrangeMonkey** extension.
+    > ⚠️ **Note**: Tampermonkey is currently **NOT** supported.
+    > ⚠️ **注意**：暂不支持 Tampermonkey，请使用 OrangeMonkey。
 2.  [👉 Click here to install](https://github.com/GhostXia/Google-AI-Studio-Exporter/raw/main/google-ai-studio-exporter.user.js)
 3.  Open [Google AI Studio](https://aistudio.google.com/).
 4.  You will see a **"🚀 导出对话"** button on the top right.
