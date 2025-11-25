@@ -2,7 +2,7 @@
 // @name         Google AI Studio Exporter
 // @name:zh-CN   Google AI Studio 对话导出器
 // @namespace    https://github.com/GhostXia/Google-AI-Studio-Exporter
-// @version      1.1.2
+// @version      1.2.1
 // @description  Export your Gemini chat history from Google AI Studio to a text file. Features: Auto-scrolling, User/Model role differentiation, clean output, and full mobile optimization.
 // @description:zh-CN 完美导出 Google AI Studio 对话记录。具备自动滚动加载、精准去重、防抖动、User/Model角色区分，以及全平台响应式优化。支持 PC、平板、手机全平台。
 // @author       GhostXia
@@ -410,51 +410,81 @@
 
         updateUI('SCROLLING', 0);
 
-        // 移动端增强回到顶部逻辑 - 验证循环
-        console.log("回到顶部，当前 scrollTop:", scroller.scrollTop);
+        // ========================================
+        // 智能跳转：使用滚动条按钮直接跳到第一个对话
+        // ========================================
+        console.log("尝试使用滚动条按钮跳转到第一个对话...");
 
-        // 多次尝试并验证，最多 5 次
-        let scrollAttempts = 0;
-        const maxAttempts = 5;
+        // 查找所有对话轮次按钮
+        const scrollbarButtons = document.querySelectorAll('button[id^="scrollbar-item-"]');
+        console.log(`找到 ${scrollbarButtons.length} 个对话轮次按钮`);
 
-        while (scroller.scrollTop > 10 && scrollAttempts < maxAttempts) {
-            scrollAttempts++;
-            console.log(`第 ${scrollAttempts} 次尝试回到顶部...`);
+        if (scrollbarButtons.length > 0) {
+            // 点击第一个按钮（最早的对话）
+            const firstButton = scrollbarButtons[0];
+            console.log("点击第一个对话按钮:", firstButton.getAttribute('name') || firstButton.id);
+            firstButton.click();
 
-            // 方法 1: 直接设置
-            scroller.scrollTop = 0;
-            await sleep(400);
-
-            // 方法 2: scrollTo
-            if (scroller.scrollTop > 10) {
-                scroller.scrollTo({ top: 0, behavior: 'instant' });
-                await sleep(400);
-            }
-
-            // 方法 3: 强制向上滚动
-            if (scroller.scrollTop > 10) {
-                scroller.scrollBy({ top: -99999, behavior: 'instant' });
-                await sleep(400);
-            }
-
-            console.log(`尝试后 scrollTop: ${scroller.scrollTop}`);
-        }
-
-        if (scroller.scrollTop > 100) {
-            console.warn("警告：未能完全回到顶部，当前位置:", scroller.scrollTop);
+            // 等待跳转和渲染
+            await sleep(1500);
+            console.log("跳转后 scrollTop:", scroller.scrollTop);
         } else {
-            console.log("✓ 成功回到顶部，当前 scrollTop:", scroller.scrollTop);
+            console.log("未找到滚动条按钮，使用备用方案...");
         }
 
-        // 额外等待，确保页面渲染稳定
-        await sleep(800);
+        // 备用方案：如果按钮不存在或跳转失败，逐步向上滚动
+        const initialScrollTop = scroller.scrollTop;
+        if (initialScrollTop > 500) {
+            console.log("执行备用滚动方案，当前 scrollTop:", initialScrollTop);
+            let currentPos = initialScrollTop;
+            let upwardAttempts = 0;
+            const maxUpwardAttempts = 15; // 减少尝试次数
 
-        // 最后一次确认并修正
+            while (currentPos > 100 && upwardAttempts < maxUpwardAttempts) {
+                upwardAttempts++;
+
+                // 每次向上滚动一个视口高度
+                const scrollAmount = Math.min(window.innerHeight, currentPos);
+                scroller.scrollBy({ top: -scrollAmount, behavior: 'smooth' });
+
+                await sleep(500);
+
+                const newPos = scroller.scrollTop;
+                console.log(`向上滚动 ${upwardAttempts}/${maxUpwardAttempts}: ${currentPos} → ${newPos}`);
+
+                // 如果卡住了，尝试直接设置
+                if (Math.abs(newPos - currentPos) < 10) {
+                    console.log("检测到卡住，尝试直接设置...");
+                    scroller.scrollTop = Math.max(0, currentPos - scrollAmount);
+                    await sleep(300);
+                }
+
+                currentPos = scroller.scrollTop;
+
+                // 如果已经到顶部附近，退出
+                if (currentPos < 100) {
+                    break;
+                }
+            }
+        }
+
+        // 最终确保到达顶部
+        console.log("执行最终回到顶部，当前 scrollTop:", scroller.scrollTop);
+        scroller.scrollTop = 0;
+        await sleep(500);
+
+        // 再次确认
         if (scroller.scrollTop > 10) {
-            console.log("最后修正，scrollTop:", scroller.scrollTop);
-            scroller.scrollTop = 0;
+            scroller.scrollTo({ top: 0, behavior: 'instant' });
             await sleep(500);
         }
+
+        console.log("✓ 回到顶部完成，最终 scrollTop:", scroller.scrollTop);
+
+        // 等待 DOM 稳定
+        await sleep(800);
+
+
 
 
 
