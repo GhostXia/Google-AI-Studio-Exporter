@@ -119,7 +119,7 @@ Here is the analysis of the code...
 
 ---
 
-## 📈 Star History
+## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=GhostXia/Google-AI-Studio-Exporter&type=date&legend=top-left)](https://www.star-history.com/#GhostXia/Google-AI-Studio-Exporter&type=date&legend=top-left)
 
