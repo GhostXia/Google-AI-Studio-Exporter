@@ -2,7 +2,7 @@
 // @name         Google AI Studio Exporter
 // @name:zh-CN   Google AI Studio 对话导出器
 // @namespace    https://github.com/GhostXia/Google-AI-Studio-Exporter
-// @version      1.1.0
+// @version      1.1.1
 // @description  Export your Gemini chat history from Google AI Studio to a text file. Features: Auto-scrolling, User/Model role differentiation, clean output, and full mobile optimization.
 // @description:zh-CN 完美导出 Google AI Studio 对话记录。具备自动滚动加载、精准去重、防抖动、User/Model角色区分，以及全平台响应式优化。支持 PC、平板、手机全平台。
 // @author       GhostXia
@@ -383,11 +383,24 @@
 
         let scroller = findRealScroller();
 
+        // 移动端增强激活逻辑
         if (!scroller || scroller.scrollHeight <= scroller.clientHeight) {
             console.log("尝试主动激活滚动容器...");
+            // 先尝试滚动 window
             window.scrollBy(0, 1);
             await sleep(100);
             scroller = findRealScroller();
+        }
+
+        // 如果还是找不到，尝试触摸激活
+        if (!scroller || scroller.scrollHeight <= scroller.clientHeight) {
+            console.log("尝试触摸激活...");
+            const bubble = document.querySelector('ms-chat-turn');
+            if (bubble) {
+                bubble.scrollIntoView({ behavior: 'instant' });
+                await sleep(200);
+                scroller = findRealScroller();
+            }
         }
 
         if (!scroller) {
@@ -396,8 +409,29 @@
         }
 
         updateUI('SCROLLING', 0);
+
+        // 移动端增强回到顶部逻辑 - 多次尝试
+        console.log("回到顶部，当前 scrollTop:", scroller.scrollTop);
+
+        // 第一次尝试：直接设置
         scroller.scrollTop = 0;
-        await sleep(1500);
+        await sleep(300);
+
+        // 第二次尝试：使用 scrollTo
+        if (scroller.scrollTop > 50) {
+            scroller.scrollTo({ top: 0, behavior: 'instant' });
+            await sleep(300);
+        }
+
+        // 第三次尝试：强制触发
+        if (scroller.scrollTop > 50) {
+            scroller.scrollBy({ top: -99999, behavior: 'instant' });
+            await sleep(300);
+        }
+
+        console.log("回到顶部完成，当前 scrollTop:", scroller.scrollTop);
+        await sleep(900);
+
 
         let lastScrollTop = -9999;
         let stuckCount = 0;
