@@ -60,4 +60,4 @@ Here is the analysis of the code...
 
 ## 📜 License
 
-MIT License
+AGPL-3.0 License
