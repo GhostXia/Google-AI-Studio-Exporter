@@ -3,7 +3,7 @@
 [English](#english) | [中文](#chinese)
 
 <div align="center">
-  <img src="assets/screenshot-ui.png" alt="UI Screenshot" width="600">
+  <img src="assets/screenshot-ui.svg" alt="UI Screenshot" width="600">
 </div>
 
 <span id="english"></span>
