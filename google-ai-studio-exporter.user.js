@@ -9,6 +9,10 @@
 // @license      AGPL-3.0
 // @match        https://aistudio.google.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=google.com
+// @homepageURL  https://github.com/GhostXia/Google-AI-Studio-Exporter
+// @supportURL   https://github.com/GhostXia/Google-AI-Studio-Exporter/issues
+// @downloadURL  https://github.com/GhostXia/Google-AI-Studio-Exporter/raw/main/google-ai-studio-exporter.user.js
+// @updateURL    https://github.com/GhostXia/Google-AI-Studio-Exporter/raw/main/google-ai-studio-exporter.user.js
 // @grant        none
 // ==/UserScript==
 
