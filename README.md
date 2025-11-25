@@ -4,6 +4,15 @@
 
 <div align="center">
   <img src="assets/screenshot-ui.svg" alt="UI Screenshot" width="600">
+  
+  <br><br>
+
+  <!-- 浏览量徽章 -->
+  <img src="https://visitor-badge.laobi.icu/badge?page_id=GhostXia.Google-AI-Studio-Exporter" alt="visitors">
+  <!-- GitHub Stars 徽章 -->
+  <img src="https://img.shields.io/github/stars/GhostXia/Google-AI-Studio-Exporter?style=flat-square&logo=github" alt="GitHub stars">
+  <!-- License 徽章 -->
+  <img src="https://img.shields.io/github/license/GhostXia/Google-AI-Studio-Exporter?style=flat-square" alt="license">
 </div>
 
 <span id="english"></span>
