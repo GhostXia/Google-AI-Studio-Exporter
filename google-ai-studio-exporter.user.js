@@ -49,7 +49,11 @@
             'role_gemini': 'Gemini',
             'err_no_scroller': '未找到滚动容器。请尝试刷新页面或手动滚动一下再试。',
             'err_no_data': '未采集到任何对话数据。请检查页面是否有对话内容。',
-            'err_runtime': '运行错误: '
+            'err_runtime': '运行错误: ',
+            'status_packaging_images': '正在打包 {n} 张图片...',
+            'status_packaging_images_progress': '打包图片: {c}/{t}',
+            'status_packaging_files': '正在打包 {n} 个文件...',
+            'status_packaging_files_progress': '打包文件: {c}/{t}'
         },
         'en': {
             'btn_export': '🚀 Export',
@@ -75,7 +79,11 @@
             'role_gemini': 'Gemini',
             'err_no_scroller': 'Scroll container not found. Try refreshing or scrolling manually.',
             'err_no_data': 'No conversation data was collected. Please check if the page has any chat content.',
-            'err_runtime': 'Runtime Error: '
+            'err_runtime': 'Runtime Error: ',
+            'status_packaging_images': 'Packaging {n} images...',
+            'status_packaging_images_progress': 'Packaging images: {c}/{t}',
+            'status_packaging_files': 'Packaging {n} files...',
+            'status_packaging_files_progress': 'Packaging files: {c}/{t}'
         }
     };
 
@@ -623,6 +631,11 @@
     // 5. 辅助功能
     // ==========================================
 
+    // Shared Regex Constants
+    // Capture: 1=Alt/Text, 2=URL, 3=Title(optional)
+    const IMG_REGEX = /!\[([^\]]*)\]\(([^\s)]+)(\s+"[^"]*")?\)/g;
+    const LINK_REGEX = /\[([^\]]*)\]\(([^\s)]+)(\s+"[^"]*")?\)/g;
+
     function findRealScroller() {
         const candidates = document.querySelectorAll('[role="main"], .conversation-container, ms-chat-container');
         for (const el of candidates) {
@@ -776,13 +789,12 @@
     // Helper: Process and download images
     async function processImages(allText, imgFolder) {
         const imgMap = new Map();
-        // More robust regex: captures URL before optional title
-        const imgRegex = /!\[([^\]]*)\]\(([^\s)]+)(?:\s+"[^"]*")?\)/g;
-        const imgMatches = [...allText.matchAll(imgRegex)];
+        // Use shared regex constant
+        const imgMatches = [...allText.matchAll(IMG_REGEX)];
         const uniqueImgUrls = new Set(imgMatches.map(m => m[2])); // URL is in group 2
 
         if (uniqueImgUrls.size > 0) {
-            updateUI('SCROLLING', `正在打包 ${uniqueImgUrls.size} 张图片...`);
+            updateUI('SCROLLING', t('status_packaging_images').replace('{n}', uniqueImgUrls.size));
             let completedCount = 0;
 
             const imagePromises = Array.from(uniqueImgUrls).map(async (url, index) => {
@@ -798,7 +810,7 @@
                     console.error("图片下载失败:", url, e);
                 }
                 completedCount++;
-                updateUI('SCROLLING', `打包图片: ${completedCount}/${uniqueImgUrls.size}`);
+                updateUI('SCROLLING', t('status_packaging_images_progress').replace('{c}', completedCount).replace('{t}', uniqueImgUrls.size));
             });
 
             await Promise.all(imagePromises);
@@ -810,9 +822,8 @@
     // Helper: Process and download files
     async function processFiles(allText, fileFolder) {
         const fileMap = new Map();
-        // More robust regex: captures URL before optional title
-        const linkRegex = /\[([^\]]*)\]\(([^\s)]+)(?:\s+"[^"]*")?\)/g;
-        const linkMatches = [...allText.matchAll(linkRegex)];
+        // Use shared regex constant
+        const linkMatches = [...allText.matchAll(LINK_REGEX)];
         const uniqueFileUrls = new Set();
         const downloadableExtensions = ['.pdf', '.csv', '.txt', '.json', '.py', '.js', '.html', '.css', '.md', '.zip', '.tar', '.gz'];
 
@@ -833,7 +844,7 @@
         }
 
         if (uniqueFileUrls.size > 0) {
-            updateUI('SCROLLING', `正在打包 ${uniqueFileUrls.size} 个文件...`);
+            updateUI('SCROLLING', t('status_packaging_files').replace('{n}', uniqueFileUrls.size));
             let completedCount = 0;
 
             const filePromises = Array.from(uniqueFileUrls).map(async (url, index) => {
@@ -864,7 +875,7 @@
                     console.error("文件下载失败:", url, e);
                 }
                 completedCount++;
-                updateUI('SCROLLING', `打包文件: ${completedCount}/${uniqueFileUrls.size}`);
+                updateUI('SCROLLING', t('status_packaging_files_progress').replace('{c}', completedCount).replace('{t}', uniqueFileUrls.size));
             });
 
             await Promise.all(filePromises);
@@ -875,10 +886,6 @@
 
     // Helper: Generate Markdown content with URL replacements
     function generateMarkdownContent(imgMap, fileMap) {
-        // Capture: 1=Alt/Text, 2=URL, 3=Title(optional)
-        const imgRegex = /!\[([^\]]*)\]\(([^\s)]+)(\s+"[^"]*")?\)/g;
-        const linkRegex = /\[([^\]]*)\]\(([^\s)]+)(\s+"[^"]*")?\)/g;
-
         let content = `# ${t('file_header')}\n\n`;
         content += `**${t('file_time')}:** ${new Date().toLocaleString()}\n\n`;
         content += `**${t('file_count')}:** ${collectedData.size}\n\n`;
@@ -889,7 +896,7 @@
             let processedText = item.text;
 
             // Replace image URLs
-            processedText = processedText.replace(imgRegex, (match, alt, url, title) => {
+            processedText = processedText.replace(IMG_REGEX, (match, alt, url, title) => {
                 if (imgMap.has(url)) {
                     const titleStr = title || '';
                     return `![${alt}](${imgMap.get(url)}${titleStr})`;
@@ -898,7 +905,7 @@
             });
 
             // Replace file URLs
-            processedText = processedText.replace(linkRegex, (match, text, url, title) => {
+            processedText = processedText.replace(LINK_REGEX, (match, text, url, title) => {
                 // Skip image links
                 if (match.startsWith('!')) {
                     return match;
