@@ -349,6 +349,7 @@
     let collectedData = new Map();
     let overlay, titleEl, statusEl, countEl, closeBtn;
     let exportMode = null; // 'full' or 'text'
+    let cachedZipBlob = null;
 
     // ==========================================
     // 3. UI 逻辑
@@ -391,6 +392,10 @@
 
         closeBtn.onclick = () => { overlay.style.display = 'none'; };
         saveBtn.onclick = async () => {
+            if (cachedZipBlob) {
+                downloadBlob(cachedZipBlob, `Gemini_Chat_v14_${Date.now()}.zip`);
+                return;
+            }
             try {
                 const result = await downloadCollectedData();
                 if (!result) {
@@ -478,6 +483,7 @@
         isRunning = true;
         hasFinished = false;
         collectedData.clear();
+        cachedZipBlob = null;
 
         // 显示模式选择
         try {
@@ -793,107 +799,95 @@
         downloadBlob(blob, `Gemini_Chat_v14_${Date.now()}.md`);
     }
 
-    // Helper: Process and download images
-    async function processImages(allText, imgFolder) {
-        const imgMap = new Map();
-        // Use shared regex constant
-        const imgMatches = [...allText.matchAll(IMG_REGEX)];
-        const uniqueImgUrls = new Set(imgMatches.map(m => m[2])); // URL is in group 2
+    // Generic Helper: Process resources (images or files)
+    async function processResources(allText, zipFolder, config) {
+        const resourceMap = new Map();
+        const matches = [...allText.matchAll(config.regex)];
+        const uniqueUrls = new Set();
 
-        if (uniqueImgUrls.size > 0) {
-            updateUI('SCROLLING', t('status_packaging_images', { n: uniqueImgUrls.size }));
+        for (const match of matches) {
+            if (config.filter && !config.filter(match)) continue;
+            const url = match[2]; // Assuming group 2 is always URL
+            uniqueUrls.add(url);
+        }
+
+        if (uniqueUrls.size > 0) {
+            updateUI('SCROLLING', t(config.statusStart, { n: uniqueUrls.size }));
             let completedCount = 0;
 
-            const imagePromises = Array.from(uniqueImgUrls).map(async (url, index) => {
+            const promises = Array.from(uniqueUrls).map(async (url, index) => {
                 try {
                     const blob = await fetchResource(url);
                     if (blob) {
-                        const extension = (blob.type.split('/')[1] || 'png').split('+')[0];
-                        const finalName = `image_${index}.${extension}`;
-                        imgFolder.file(finalName, blob);
-                        imgMap.set(url, `images/${finalName}`);
+                        const filename = config.filenameGenerator(url, index, blob);
+                        zipFolder.file(filename, blob);
+                        resourceMap.set(url, `${config.subDir}/${filename}`);
                     }
                 } catch (e) {
-                    console.error("图片下载失败:", url, e);
+                    console.error(`${config.subDir} download failed:`, url, e);
                 }
                 completedCount++;
-                if (completedCount % 5 === 0 || completedCount === uniqueImgUrls.size) {
-                    updateUI('SCROLLING', t('status_packaging_images_progress', { c: completedCount, t: uniqueImgUrls.size }));
+                if (completedCount % 5 === 0 || completedCount === uniqueUrls.size) {
+                    updateUI('SCROLLING', t(config.statusProgress, { c: completedCount, t: uniqueUrls.size }));
                 }
             });
 
-            await Promise.all(imagePromises);
+            await Promise.all(promises);
         }
+        return resourceMap;
+    }
 
-        return imgMap;
+    // Helper: Process and download images
+    async function processImages(allText, imgFolder) {
+        return processResources(allText, imgFolder, {
+            regex: IMG_REGEX,
+            subDir: 'images',
+            statusStart: 'status_packaging_images',
+            statusProgress: 'status_packaging_images_progress',
+            filenameGenerator: (url, index, blob) => {
+                const extension = (blob.type.split('/')[1] || 'png').split('+')[0];
+                return `image_${index}.${extension}`;
+            }
+        });
     }
 
     // Helper: Process and download files
     async function processFiles(allText, fileFolder) {
-        const fileMap = new Map();
-        // Use shared regex constant
-        const linkMatches = [...allText.matchAll(LINK_REGEX)];
-        const uniqueFileUrls = new Set();
         const downloadableExtensions = ['.pdf', '.csv', '.txt', '.json', '.py', '.js', '.html', '.css', '.md', '.zip', '.tar', '.gz'];
-
-        for (const match of linkMatches) {
-            // Skip image links (those starting with !)
-            if (match[0].startsWith('!')) {
-                continue;
-            }
-            const url = match[2]; // URL is now in group 2
-            const lowerUrl = url.toLowerCase();
-            const isBlob = lowerUrl.startsWith('blob:');
-            const isGoogleStorage = lowerUrl.includes('googlestorage') || lowerUrl.includes('googleusercontent');
-            const hasExt = downloadableExtensions.some(ext => lowerUrl.split('?')[0].endsWith(ext));
-
-            if (isBlob || isGoogleStorage || hasExt) {
-                uniqueFileUrls.add(url);
-            }
-        }
-
-        if (uniqueFileUrls.size > 0) {
-            updateUI('SCROLLING', t('status_packaging_files', { n: uniqueFileUrls.size }));
-            let completedCount = 0;
-
-            const filePromises = Array.from(uniqueFileUrls).map(async (url, index) => {
+        return processResources(allText, fileFolder, {
+            regex: LINK_REGEX,
+            subDir: 'files',
+            statusStart: 'status_packaging_files',
+            statusProgress: 'status_packaging_files_progress',
+            filter: (match) => {
+                if (match[0].startsWith('!')) return false;
+                const url = match[2];
+                const lowerUrl = url.toLowerCase();
+                const isBlob = lowerUrl.startsWith('blob:');
+                const isGoogleStorage = lowerUrl.includes('googlestorage') || lowerUrl.includes('googleusercontent');
+                const hasExt = downloadableExtensions.some(ext => lowerUrl.split('?')[0].endsWith(ext));
+                return isBlob || isGoogleStorage || hasExt;
+            },
+            filenameGenerator: (url, index, blob) => {
+                let filename = "file";
                 try {
-                    let filename = "file";
-                    try {
-                        const urlObj = new URL(url);
-                        filename = urlObj.pathname.substring(urlObj.pathname.lastIndexOf('/') + 1);
-                    } catch (e) {
-                        filename = url.split('/').pop().split('?')[0];
-                    }
-
-                    let decodedFilename = filename;
-                    try {
-                        decodedFilename = decodeURIComponent(filename);
-                    } catch (e) {
-                        console.warn(`Could not decode filename: ${filename}`, e);
-                    }
-                    // Increased limit from 50 to 100 as per PR review
-                    if (!decodedFilename || decodedFilename.length > 100) decodedFilename = `file_${index}`;
-                    const finalName = `${index}_${decodedFilename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-
-                    const blob = await fetchResource(url);
-                    if (blob) {
-                        fileFolder.file(finalName, blob);
-                        fileMap.set(url, `files/${finalName}`);
-                    }
+                    const urlObj = new URL(url);
+                    filename = urlObj.pathname.substring(urlObj.pathname.lastIndexOf('/') + 1);
                 } catch (e) {
-                    console.error("文件下载失败:", url, e);
+                    filename = url.split('/').pop().split('?')[0];
                 }
-                completedCount++;
-                if (completedCount % 5 === 0 || completedCount === uniqueFileUrls.size) {
-                    updateUI('SCROLLING', t('status_packaging_files_progress', { c: completedCount, t: uniqueFileUrls.size }));
+
+                let decodedFilename = filename;
+                try {
+                    decodedFilename = decodeURIComponent(filename);
+                } catch (e) {
+                    console.warn(`Could not decode filename: ${filename}`, e);
                 }
-            });
-
-            await Promise.all(filePromises);
-        }
-
-        return fileMap;
+                // Increased limit from 50 to 100 as per PR review
+                if (!decodedFilename || decodedFilename.length > 100) decodedFilename = `file_${index}`;
+                return `${index}_${decodedFilename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+            }
+        });
     }
 
     // Helper: Generate Markdown content with URL replacements
@@ -965,6 +959,7 @@
         // Create and download ZIP
         zip.file("chat_history.md", content);
         const zipBlob = await zip.generateAsync({ type: "blob" });
+        cachedZipBlob = zipBlob;
         downloadBlob(zipBlob, `Gemini_Chat_v14_${Date.now()}.zip`);
 
         return true;
