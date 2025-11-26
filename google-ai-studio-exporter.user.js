@@ -94,18 +94,17 @@
             str = str.replace(/{s}/g, params);
             return str;
         }
+        for (const pKey in params) {
+            str = str.replace(new RegExp(`\\{${pKey}\\}`, 'g'), params[pKey]);
+        }
+        return str;
     }
-    for (const pKey in params) {
-        str = str.replace(new RegExp(`\\{${pKey}\\}`, 'g'), params[pKey]);
-    }
-    return str;
-}
 
     // ==========================================
     // 1. 样式与 UI (全平台响应式优化版)
     // ==========================================
     const style = document.createElement('style');
-style.textContent = `
+    style.textContent = `
         /* 全局遮罩层 */
         #ai-overlay-v14 {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -340,39 +339,39 @@ style.textContent = `
             .ai-status { color: #9aa0a6; }
         }
     `;
-document.head.appendChild(style);
+    document.head.appendChild(style);
 
-// ==========================================
-// 2. 状态管理
-// ==========================================
-let isRunning = false;
-let hasFinished = false;
-let collectedData = new Map();
-let overlay, titleEl, statusEl, countEl, closeBtn;
-let exportMode = null; // 'full' or 'text'
-let cachedZipBlob = null;
+    // ==========================================
+    // 2. 状态管理
+    // ==========================================
+    let isRunning = false;
+    let hasFinished = false;
+    let collectedData = new Map();
+    let overlay, titleEl, statusEl, countEl, closeBtn;
+    let exportMode = null; // 'full' or 'text'
+    let cachedZipBlob = null;
 
-// ==========================================
-// 3. UI 逻辑
-// ==========================================
-function createEntryButton() {
-    if (document.getElementById('ai-entry-btn-v14')) return;
-    const btn = document.createElement('button');
-    btn.id = 'ai-entry-btn-v14';
-    btn.className = 'ai-entry';
-    btn.innerHTML = t('btn_export');
-    btn.onclick = startProcess;
-    document.body.appendChild(btn);
-}
-
-function initUI() {
-    if (document.getElementById('ai-overlay-v14')) {
-        overlay.style.display = 'flex';
-        return;
+    // ==========================================
+    // 3. UI 逻辑
+    // ==========================================
+    function createEntryButton() {
+        if (document.getElementById('ai-entry-btn-v14')) return;
+        const btn = document.createElement('button');
+        btn.id = 'ai-entry-btn-v14';
+        btn.className = 'ai-entry';
+        btn.innerHTML = t('btn_export');
+        btn.onclick = startProcess;
+        document.body.appendChild(btn);
     }
-    overlay = document.createElement('div');
-    overlay.id = 'ai-overlay-v14';
-    overlay.innerHTML = `
+
+    function initUI() {
+        if (document.getElementById('ai-overlay-v14')) {
+            overlay.style.display = 'flex';
+            return;
+        }
+        overlay = document.createElement('div');
+        overlay.id = 'ai-overlay-v14';
+        overlay.innerHTML = `
             <div id="ai-box">
                 <div class="ai-title">${t('title_ready')}</div>
                 <div class="ai-status">${t('status_init')}</div>
@@ -383,642 +382,647 @@ function initUI() {
                 </div>
             </div>
         `;
-    document.body.appendChild(overlay);
+        document.body.appendChild(overlay);
 
-    titleEl = overlay.querySelector('.ai-title');
-    statusEl = overlay.querySelector('.ai-status');
-    countEl = overlay.querySelector('.ai-count');
-    closeBtn = overlay.querySelector('#ai-close-btn');
-    const saveBtn = overlay.querySelector('#ai-save-btn');
+        titleEl = overlay.querySelector('.ai-title');
+        statusEl = overlay.querySelector('.ai-status');
+        countEl = overlay.querySelector('.ai-count');
+        closeBtn = overlay.querySelector('#ai-close-btn');
+        const saveBtn = overlay.querySelector('#ai-save-btn');
 
-    closeBtn.onclick = () => { overlay.style.display = 'none'; };
-    saveBtn.onclick = async () => {
-        if (cachedZipBlob) {
-            downloadBlob(cachedZipBlob, `Gemini_Chat_v14_${Date.now()}.zip`);
+        closeBtn.onclick = () => { overlay.style.display = 'none'; };
+        saveBtn.onclick = async () => {
+            if (cachedZipBlob) {
+                downloadBlob(cachedZipBlob, `Gemini_Chat_v14_${Date.now()}.zip`);
+                return;
+            }
+            try {
+                const result = await downloadCollectedData();
+                if (!result) {
+                    updateUI('ERROR', t('err_no_data'));
+                }
+            } catch (err) {
+                console.error("Failed to re-download file:", err);
+                updateUI('ERROR', t('err_runtime') + err.message);
+            }
+        };
+    }
+
+    function updateUI(state, msg = "") {
+        initUI();
+        const saveBtn = overlay.querySelector('#ai-save-btn');
+        const btnContainer = overlay.querySelector('.ai-btn-container');
+        btnContainer.style.display = 'none';
+
+        if (state === 'COUNTDOWN') {
+            titleEl.innerText = t('title_countdown');
+            statusEl.innerHTML = t('status_countdown', msg);
+            countEl.innerText = "0";
+        } else if (state === 'SCROLLING') {
+            titleEl.innerText = t('title_scrolling');
+            statusEl.innerHTML = t('status_scrolling');
+            countEl.innerText = msg;
+        } else if (state === 'FINISHED') {
+            titleEl.innerText = t('title_finished');
+            statusEl.innerHTML = t('status_finished');
+            countEl.innerText = msg;
+            btnContainer.style.display = 'flex';
+            saveBtn.style.display = 'inline-block';
+            closeBtn.style.display = 'inline-block';
+        } else if (state === 'ERROR') {
+            titleEl.innerText = t('title_error');
+            statusEl.innerHTML = `<span class="ai-red">${msg}</span>`;
+            btnContainer.style.display = 'flex';
+            closeBtn.style.display = 'inline-block';
+        }
+    }
+
+    function showModeSelection() {
+        return new Promise((resolve, reject) => {
+            initUI();
+            titleEl.innerText = t('title_mode_select');
+            statusEl.innerHTML = t('status_mode_select');
+            countEl.innerText = '';
+
+            const btnContainer = overlay.querySelector('.ai-btn-container');
+            btnContainer.style.display = 'flex';
+            btnContainer.innerHTML = ''; // Clear existing buttons
+
+            // Helper to create buttons
+            const createModeButton = (id, text, isPrimary, onClick) => {
+                const btn = document.createElement('button');
+                btn.id = id;
+                btn.className = isPrimary ? 'ai-btn' : 'ai-btn ai-btn-secondary';
+                btn.textContent = text;
+                btn.onclick = onClick;
+                btnContainer.appendChild(btn);
+            };
+
+            createModeButton('ai-mode-full', t('btn_mode_full'), true, () => {
+                exportMode = 'full';
+                resolve('full');
+            });
+
+            createModeButton('ai-mode-text', t('btn_mode_text'), false, () => {
+                exportMode = 'text';
+                resolve('text');
+            });
+
+            createModeButton('ai-mode-close', t('btn_close'), false, () => {
+                overlay.style.display = 'none';
+                reject(new Error('Export cancelled by user.'));
+            });
+        });
+    }
+
+    // ==========================================
+    // 4. 核心流程
+    // ==========================================
+    async function startProcess() {
+        if (isRunning) return;
+        isRunning = true;
+        hasFinished = false;
+        collectedData.clear();
+        cachedZipBlob = null;
+
+        // 显示模式选择
+        try {
+            await showModeSelection();
+        } catch (e) {
+            console.log('Export cancelled.');
+            isRunning = false;
             return;
         }
-        try {
-            const result = await downloadCollectedData();
-            if (!result) {
-                updateUI('ERROR', t('err_no_data'));
-            }
-        } catch (err) {
-            console.error("Failed to re-download file:", err);
-            updateUI('ERROR', t('err_runtime') + err.message);
+
+        for (let i = 3; i > 0; i--) {
+            updateUI('COUNTDOWN', i);
+            await sleep(1000);
         }
-    };
-}
 
-function updateUI(state, msg = "") {
-    initUI();
-    const saveBtn = overlay.querySelector('#ai-save-btn');
-    const btnContainer = overlay.querySelector('.ai-btn-container');
-    btnContainer.style.display = 'none';
+        let scroller = findRealScroller();
 
-    if (state === 'COUNTDOWN') {
-        titleEl.innerText = t('title_countdown');
-        statusEl.innerHTML = t('status_countdown', msg);
-        countEl.innerText = "0";
-    } else if (state === 'SCROLLING') {
-        titleEl.innerText = t('title_scrolling');
-        statusEl.innerHTML = t('status_scrolling');
-        countEl.innerText = msg;
-    } else if (state === 'FINISHED') {
-        titleEl.innerText = t('title_finished');
-        statusEl.innerHTML = t('status_finished');
-        countEl.innerText = msg;
-        btnContainer.style.display = 'flex';
-        saveBtn.style.display = 'inline-block';
-        closeBtn.style.display = 'inline-block';
-    } else if (state === 'ERROR') {
-        titleEl.innerText = t('title_error');
-        statusEl.innerHTML = `<span class="ai-red">${msg}</span>`;
-        btnContainer.style.display = 'flex';
-        closeBtn.style.display = 'inline-block';
-    }
-}
-
-function showModeSelection() {
-    return new Promise((resolve, reject) => {
-        initUI();
-        titleEl.innerText = t('title_mode_select');
-        statusEl.innerHTML = t('status_mode_select');
-        countEl.innerText = '';
-
-        const btnContainer = overlay.querySelector('.ai-btn-container');
-        btnContainer.style.display = 'flex';
-        btnContainer.innerHTML = ''; // Clear existing buttons
-
-        // Helper to create buttons
-        const createModeButton = (id, text, isPrimary, onClick) => {
-            const btn = document.createElement('button');
-            btn.id = id;
-            btn.className = isPrimary ? 'ai-btn' : 'ai-btn ai-btn-secondary';
-            btn.textContent = text;
-            btn.onclick = onClick;
-            btnContainer.appendChild(btn);
-        };
-
-        createModeButton('ai-mode-full', t('btn_mode_full'), true, () => {
-            exportMode = 'full';
-            resolve('full');
-        });
-
-        createModeButton('ai-mode-text', t('btn_mode_text'), false, () => {
-            exportMode = 'text';
-            resolve('text');
-        });
-
-        createModeButton('ai-mode-close', t('btn_close'), false, () => {
-            overlay.style.display = 'none';
-            reject(new Error('Export cancelled by user.'));
-        });
-    });
-}
-
-// ==========================================
-// 4. 核心流程
-// ==========================================
-async function startProcess() {
-    if (isRunning) return;
-    isRunning = true;
-    hasFinished = false;
-    collectedData.clear();
-    cachedZipBlob = null;
-
-    // 显示模式选择
-    try {
-        await showModeSelection();
-    } catch (e) {
-        console.log('Export cancelled.');
-        isRunning = false;
-        return;
-    }
-
-    for (let i = 3; i > 0; i--) {
-        updateUI('COUNTDOWN', i);
-        await sleep(1000);
-    }
-
-    let scroller = findRealScroller();
-
-    // 移动端增强激活逻辑
-    if (!scroller || scroller.scrollHeight <= scroller.clientHeight) {
-        console.log("尝试主动激活滚动容器...");
-        // 先尝试滚动 window
-        window.scrollBy(0, 1);
-        await sleep(100);
-        scroller = findRealScroller();
-    }
-
-    // 如果还是找不到，尝试触摸激活
-    if (!scroller || scroller.scrollHeight <= scroller.clientHeight) {
-        console.log("尝试触摸激活...");
-        const bubble = document.querySelector('ms-chat-turn');
-        if (bubble) {
-            bubble.scrollIntoView({ behavior: 'instant' });
-            await sleep(200);
+        // 移动端增强激活逻辑
+        if (!scroller || scroller.scrollHeight <= scroller.clientHeight) {
+            console.log("尝试主动激活滚动容器...");
+            // 先尝试滚动 window
+            window.scrollBy(0, 1);
+            await sleep(100);
             scroller = findRealScroller();
         }
-    }
 
-    if (!scroller) {
-        endProcess("ERROR", t('err_no_scroller'));
-        return;
-    }
-
-    updateUI('SCROLLING', 0);
-
-    // ========================================
-    // 智能跳转：使用滚动条按钮直接跳到第一个对话
-    // ========================================
-    console.log("尝试使用滚动条按钮跳转到第一个对话...");
-
-    // 查找所有对话轮次按钮
-    const scrollbarButtons = document.querySelectorAll('button[id^="scrollbar-item-"]');
-    console.log(`找到 ${scrollbarButtons.length} 个对话轮次按钮`);
-
-    if (scrollbarButtons.length > 0) {
-        // 点击第一个按钮（最早的对话）
-        const firstButton = scrollbarButtons[0];
-        console.log("点击第一个对话按钮:", firstButton.getAttribute('name') || firstButton.id);
-        firstButton.click();
-
-        // 等待跳转和渲染
-        await sleep(1500);
-        console.log("跳转后 scrollTop:", scroller.scrollTop);
-    } else {
-        console.log("未找到滚动条按钮，使用备用方案...");
-    }
-
-    // 备用方案：如果按钮不存在或跳转失败，逐步向上滚动
-    const initialScrollTop = scroller.scrollTop;
-    if (initialScrollTop > 500) {
-        console.log("执行备用滚动方案，当前 scrollTop:", initialScrollTop);
-        let currentPos = initialScrollTop;
-        let upwardAttempts = 0;
-        const maxUpwardAttempts = 15; // 减少尝试次数
-
-        while (currentPos > 100 && upwardAttempts < maxUpwardAttempts) {
-            upwardAttempts++;
-
-            // 每次向上滚动一个视口高度
-            const scrollAmount = Math.min(window.innerHeight, currentPos);
-            scroller.scrollBy({ top: -scrollAmount, behavior: 'smooth' });
-
-            await sleep(500);
-
-            const newPos = scroller.scrollTop;
-            console.log(`向上滚动 ${upwardAttempts}/${maxUpwardAttempts}: ${currentPos} → ${newPos}`);
-
-            // 如果卡住了，尝试直接设置
-            if (Math.abs(newPos - currentPos) < 10) {
-                console.log("检测到卡住，尝试直接设置...");
-                scroller.scrollTop = Math.max(0, currentPos - scrollAmount);
-                await sleep(300);
-            }
-
-            currentPos = scroller.scrollTop;
-
-            // 如果已经到顶部附近，退出
-            if (currentPos < 100) {
-                break;
+        // 如果还是找不到，尝试触摸激活
+        if (!scroller || scroller.scrollHeight <= scroller.clientHeight) {
+            console.log("尝试触摸激活...");
+            const bubble = document.querySelector('ms-chat-turn');
+            if (bubble) {
+                bubble.scrollIntoView({ behavior: 'instant' });
+                await sleep(200);
+                scroller = findRealScroller();
             }
         }
-    }
 
-    // 最终确保到达顶部
-    console.log("执行最终回到顶部，当前 scrollTop:", scroller.scrollTop);
-    scroller.scrollTop = 0;
-    await sleep(500);
+        if (!scroller) {
+            endProcess("ERROR", t('err_no_scroller'));
+            return;
+        }
 
-    // 再次确认
-    if (scroller.scrollTop > 10) {
-        scroller.scrollTo({ top: 0, behavior: 'instant' });
-        await sleep(500);
-    }
+        updateUI('SCROLLING', 0);
 
-    console.log("✓ 回到顶部完成，最终 scrollTop:", scroller.scrollTop);
+        // ========================================
+        // 智能跳转：使用滚动条按钮直接跳到第一个对话
+        // ========================================
+        console.log("尝试使用滚动条按钮跳转到第一个对话...");
 
-    // 等待 DOM 稳定
-    await sleep(800);
+        // 查找所有对话轮次按钮
+        const scrollbarButtons = document.querySelectorAll('button[id^="scrollbar-item-"]');
+        console.log(`找到 ${scrollbarButtons.length} 个对话轮次按钮`);
 
+        if (scrollbarButtons.length > 0) {
+            // 点击第一个按钮（最早的对话）
+            const firstButton = scrollbarButtons[0];
+            console.log("点击第一个对话按钮:", firstButton.getAttribute('name') || firstButton.id);
+            firstButton.click();
 
+            // 等待跳转和渲染
+            await sleep(1500);
+            console.log("跳转后 scrollTop:", scroller.scrollTop);
+        } else {
+            console.log("未找到滚动条按钮，使用备用方案...");
+        }
 
+        // 备用方案：如果按钮不存在或跳转失败，逐步向上滚动
+        const initialScrollTop = scroller.scrollTop;
+        if (initialScrollTop > 500) {
+            console.log("执行备用滚动方案，当前 scrollTop:", initialScrollTop);
+            let currentPos = initialScrollTop;
+            let upwardAttempts = 0;
+            const maxUpwardAttempts = 15; // 减少尝试次数
 
+            while (currentPos > 100 && upwardAttempts < maxUpwardAttempts) {
+                upwardAttempts++;
 
-    let lastScrollTop = -9999;
-    let stuckCount = 0;
+                // 每次向上滚动一个视口高度
+                const scrollAmount = Math.min(window.innerHeight, currentPos);
+                scroller.scrollBy({ top: -scrollAmount, behavior: 'smooth' });
 
-    try {
-        while (isRunning) {
-            captureData();
-            updateUI('SCROLLING', collectedData.size);
+                await sleep(500);
 
-            scroller.scrollBy({ top: window.innerHeight * 0.7, behavior: 'smooth' });
+                const newPos = scroller.scrollTop;
+                console.log(`向上滚动 ${upwardAttempts}/${maxUpwardAttempts}: ${currentPos} → ${newPos}`);
 
-            await sleep(900);
+                // 如果卡住了，尝试直接设置
+                if (Math.abs(newPos - currentPos) < 10) {
+                    console.log("检测到卡住，尝试直接设置...");
+                    scroller.scrollTop = Math.max(0, currentPos - scrollAmount);
+                    await sleep(300);
+                }
 
-            const currentScroll = scroller.scrollTop;
+                currentPos = scroller.scrollTop;
 
-            if (Math.abs(currentScroll - lastScrollTop) <= 2) {
-                stuckCount++;
-                if (stuckCount >= 3) {
-                    console.log("判定到底", currentScroll);
+                // 如果已经到顶部附近，退出
+                if (currentPos < 100) {
                     break;
                 }
-            } else {
-                stuckCount = 0;
-            }
-            lastScrollTop = currentScroll;
-        }
-    } catch (e) {
-        console.error(e);
-        endProcess("ERROR", t('err_runtime') + e.message);
-        return;
-    }
-
-    endProcess("FINISHED");
-}
-
-// ==========================================
-// 5. 辅助功能
-// ==========================================
-
-// Shared Regex Constants
-// Capture: 1=Alt/Text, 2=URL, 3=Title(optional)
-const IMG_REGEX = /!\[([^\]]*)\]\(([^\s)]+)(\s+"[^"]*")?\)/g;
-const LINK_REGEX = /\[([^\]]*)\]\(([^\s)]+)(\s+"[^"]*")?\)/g;
-
-function findRealScroller() {
-    const candidates = document.querySelectorAll('[role="main"], .conversation-container, ms-chat-container');
-    for (const el of candidates) {
-        if (el.scrollHeight > el.clientHeight) return el;
-    }
-    return document.scrollingElement || document.documentElement;
-}
-
-function captureData() {
-    const turns = document.querySelectorAll('ms-chat-turn');
-    turns.forEach(turn => {
-        if (!turn.id || collectedData.has(turn.id)) return;
-
-        const role = (turn.querySelector('[data-turn-role="Model"]') || turn.innerHTML.includes('model-prompt-container')) ? "Gemini" : "User";
-
-        const clone = turn.cloneNode(true);
-        const trash = ['.actions-container', '.turn-footer', 'button', 'mat-icon', 'ms-grounding-sources', 'ms-search-entry-point'];
-        trash.forEach(s => clone.querySelectorAll(s).forEach(e => e.remove()));
-
-        let text = htmlToMarkdown(clone);
-
-        if (text.length > 0) collectedData.set(turn.id, { role, text });
-    });
-}
-
-function htmlToMarkdown(node, listContext = null) {
-    if (node.nodeType === Node.TEXT_NODE) {
-        return node.textContent;
-    }
-
-    if (node.nodeType !== Node.ELEMENT_NODE) return '';
-
-    const tag = node.tagName.toLowerCase();
-
-    // Images
-    if (tag === 'img') {
-        const alt = node.getAttribute('alt') || '';
-        const src = node.getAttribute('src') || '';
-        return `![${alt}](${src})`;
-    }
-
-    // Code blocks
-    if (tag === 'pre') {
-        const codeEl = node.querySelector('code');
-        if (codeEl) {
-            const language = Array.from(codeEl.classList).find(c => c.startsWith('language-'))?.replace('language-', '') || '';
-            const code = codeEl.textContent;
-            return `\n\`\`\`${language}\n${code}\n\`\`\`\n`;
-        }
-    }
-
-    // Inline code
-    if (tag === 'code') {
-        return `\`${node.textContent}\``;
-    }
-
-    // Headings
-    if (/^h[1-6]$/.test(tag)) {
-        const level = parseInt(tag[1]);
-        return '\n' + '#'.repeat(level) + ' ' + getChildrenText(node, listContext) + '\n';
-    }
-
-    // Bold
-    if (tag === 'strong' || tag === 'b') {
-        return `**${getChildrenText(node, listContext)}**`;
-    }
-
-    // Italic
-    if (tag === 'em' || tag === 'i') {
-        return `*${getChildrenText(node, listContext)}*`;
-    }
-
-    // Links
-    if (tag === 'a') {
-        const href = node.getAttribute('href') || '';
-        const text = getChildrenText(node, listContext);
-        return `[${text}](${href})`;
-    }
-
-    // Lists - pass context to children
-    if (tag === 'ul' || tag === 'ol') {
-        const listType = tag; // 'ul' or 'ol'
-        let index = 0;
-        let result = '\n';
-
-        for (const child of node.childNodes) {
-            if (child.nodeType === Node.ELEMENT_NODE && child.tagName.toLowerCase() === 'li') {
-                index++;
-                result += htmlToMarkdown(child, { type: listType, index: index });
-            } else {
-                result += htmlToMarkdown(child);
             }
         }
 
-        return result + '\n';
-    }
+        // 最终确保到达顶部
+        console.log("执行最终回到顶部，当前 scrollTop:", scroller.scrollTop);
+        scroller.scrollTop = 0;
+        await sleep(500);
 
-    // List items - use context to determine format
-    if (tag === 'li') {
-        const content = getChildrenText(node, listContext).trim();
-        if (listContext && listContext.type === 'ol') {
-            return `${listContext.index}. ${content}\n`;
-        } else {
-            return `- ${content}\n`;
+        // 再次确认
+        if (scroller.scrollTop > 10) {
+            scroller.scrollTo({ top: 0, behavior: 'instant' });
+            await sleep(500);
         }
-    }
 
-    // Line breaks
-    if (tag === 'br') {
-        return '\n';
-    }
+        console.log("✓ 回到顶部完成，最终 scrollTop:", scroller.scrollTop);
 
-    // Blockquotes - prefix each line with >
-    if (tag === 'blockquote') {
-        const content = getChildrenText(node, listContext);
-        // Split by lines and prefix each with "> "
-        return '\n' + content.split('\n')
-            .map(line => `> ${line}`)
-            .join('\n') + '\n';
-    }
+        // 等待 DOM 稳定
+        await sleep(800);
 
-    // Block elements
-    if (['div', 'p'].includes(tag)) {
-        return '\n' + getChildrenText(node, listContext) + '\n';
-    }
 
-    return getChildrenText(node, listContext);
-}
 
-function getChildrenText(node, listContext = null) {
-    return Array.from(node.childNodes).map(child => htmlToMarkdown(child, listContext)).join('');
-}
 
-// Helper: Download text-only mode
-function downloadTextOnly() {
-    let content = `# ${t('file_header')}\n\n`;
-    content += `**${t('file_time')}:** ${new Date().toLocaleString()}\n\n`;
-    content += `**${t('file_count')}:** ${collectedData.size}\n\n`;
-    content += "---\n\n";
 
-    for (const [id, item] of collectedData) {
-        const roleName = item.role === 'Gemini' ? t('role_gemini') : t('role_user');
-        content += `## ${roleName}\n\n${item.text}\n\n`;
-        content += `---\n\n`;
-    }
+        let lastScrollTop = -9999;
+        let stuckCount = 0;
 
-    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
-    downloadBlob(blob, `Gemini_Chat_v14_${Date.now()}.md`);
-}
+        try {
+            while (isRunning) {
+                captureData();
+                updateUI('SCROLLING', collectedData.size);
 
-// Generic Helper: Process resources (images or files)
-async function processResources(allText, zipFolder, config) {
-    const resourceMap = new Map();
-    const matches = [...allText.matchAll(config.regex)];
-    const uniqueUrls = new Set();
+                scroller.scrollBy({ top: window.innerHeight * 0.7, behavior: 'smooth' });
 
-    for (const match of matches) {
-        if (config.filter && !config.filter(match)) continue;
-        const url = match[2]; // Assuming group 2 is always URL
-        uniqueUrls.add(url);
-    }
+                await sleep(900);
 
-    if (uniqueUrls.size > 0) {
-        updateUI('SCROLLING', t(config.statusStart, { n: uniqueUrls.size }));
-        let completedCount = 0;
+                const currentScroll = scroller.scrollTop;
 
-        const promises = Array.from(uniqueUrls).map(async (url, index) => {
-            try {
-                const blob = await fetchResource(url);
-                if (blob) {
-                    const filename = config.filenameGenerator(url, index, blob);
-                    zipFolder.file(filename, blob);
-                    resourceMap.set(url, `${config.subDir}/${filename}`);
+                if (Math.abs(currentScroll - lastScrollTop) <= 2) {
+                    stuckCount++;
+                    if (stuckCount >= 3) {
+                        console.log("判定到底", currentScroll);
+                        break;
+                    }
+                } else {
+                    stuckCount = 0;
                 }
-            } catch (e) {
-                console.error(`${config.subDir} download failed:`, url, e);
+                lastScrollTop = currentScroll;
             }
-            completedCount++;
-            if (completedCount % 5 === 0 || completedCount === uniqueUrls.size) {
-                updateUI('SCROLLING', t(config.statusProgress, { c: completedCount, t: uniqueUrls.size }));
-            }
-        });
-
-        await Promise.all(promises);
-    }
-    return resourceMap;
-}
-
-// Helper: Process and download images
-async function processImages(allText, imgFolder) {
-    return processResources(allText, imgFolder, {
-        regex: IMG_REGEX,
-        subDir: 'images',
-        statusStart: 'status_packaging_images',
-        statusProgress: 'status_packaging_images_progress',
-        filenameGenerator: (url, index, blob) => {
-            const extension = (blob.type.split('/')[1] || 'png').split('+')[0];
-            return `image_${index}.${extension}`;
+        } catch (e) {
+            console.error(e);
+            endProcess("ERROR", t('err_runtime') + e.message);
+            return;
         }
-    });
-}
 
-// Helper: Process and download files
-async function processFiles(allText, fileFolder) {
-    const downloadableExtensions = ['.pdf', '.csv', '.txt', '.json', '.py', '.js', '.html', '.css', '.md', '.zip', '.tar', '.gz'];
-    return processResources(allText, fileFolder, {
-        regex: LINK_REGEX,
-        subDir: 'files',
-        statusStart: 'status_packaging_files',
-        statusProgress: 'status_packaging_files_progress',
-        filter: (match) => {
-            if (match[0].startsWith('!')) return false;
-            const url = match[2];
-            const lowerUrl = url.toLowerCase();
-            const isBlob = lowerUrl.startsWith('blob:');
-            const isGoogleStorage = lowerUrl.includes('googlestorage') || lowerUrl.includes('googleusercontent');
-            const hasExt = downloadableExtensions.some(ext => lowerUrl.split('?')[0].endsWith(ext));
-            return isBlob || isGoogleStorage || hasExt;
-        },
-        filenameGenerator: (url, index, blob) => {
-            let filename = "file";
-            try {
-                const urlObj = new URL(url);
-                filename = urlObj.pathname.substring(urlObj.pathname.lastIndexOf('/') + 1);
-            } catch (e) {
-                filename = url.split('/').pop().split('?')[0];
-            }
-
-            let decodedFilename = filename;
-            try {
-                decodedFilename = decodeURIComponent(filename);
-            } catch (e) {
-                console.warn(`Could not decode filename: ${filename}`, e);
-            }
-            // Increased limit from 50 to 100 as per PR review
-            if (!decodedFilename || decodedFilename.length > 100) decodedFilename = `file_${index}`;
-            return `${index}_${decodedFilename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-        }
-    });
-}
-
-// Helper: Generate Markdown content with URL replacements
-function generateMarkdownContent(imgMap, fileMap) {
-    let content = `# ${t('file_header')}\n\n`;
-    content += `**${t('file_time')}:** ${new Date().toLocaleString()}\n\n`;
-    content += `**${t('file_count')}:** ${collectedData.size}\n\n`;
-    content += "---\n\n";
-
-    for (const [id, item] of collectedData) {
-        const roleName = item.role === 'Gemini' ? t('role_gemini') : t('role_user');
-        let processedText = item.text;
-
-        // Replace image URLs
-        processedText = processedText.replace(IMG_REGEX, (match, alt, url, title) => {
-            if (imgMap.has(url)) {
-                const titleStr = title || '';
-                return `![${alt}](${imgMap.get(url)}${titleStr})`;
-            }
-            return match;
-        });
-
-        // Replace file URLs
-        processedText = processedText.replace(LINK_REGEX, (match, text, url, title) => {
-            if (fileMap.has(url)) {
-                const titleStr = title || '';
-                return `[${text}](${fileMap.get(url)}${titleStr})`;
-            }
-            return match;
-        });
-
-        content += `## ${roleName}\n\n${processedText}\n\n`;
-        content += `---\n\n`;
+        endProcess("FINISHED");
     }
 
-    return content;
-}
+    // ==========================================
+    // 5. 辅助功能
+    // ==========================================
 
-// Main function: orchestrate the download process
-async function downloadCollectedData() {
-    if (collectedData.size === 0) return false;
+    // Shared Regex Constants
+    // Capture: 1=Alt/Text, 2=URL, 3=Title(optional)
+    const IMG_REGEX = /!\[([^\]]*)\]\(([^\s)]+)(\s+"[^"]*")?\)/g;
+    const LINK_REGEX = /\[([^\]]*)\]\(([^\s)]+)(\s+"[^"]*")?\)/g;
 
-    // Text-only mode
-    if (exportMode === 'text') {
-        downloadTextOnly();
+    function findRealScroller() {
+        const candidates = document.querySelectorAll('[role="main"], .conversation-container, ms-chat-container');
+        for (const el of candidates) {
+            if (el.scrollHeight > el.clientHeight) return el;
+        }
+        return document.scrollingElement || document.documentElement;
+    }
+
+    function captureData() {
+        const turns = document.querySelectorAll('ms-chat-turn');
+        turns.forEach(turn => {
+            if (!turn.id || collectedData.has(turn.id)) return;
+
+            const role = (turn.querySelector('[data-turn-role="Model"]') || turn.innerHTML.includes('model-prompt-container')) ? "Gemini" : "User";
+
+            const clone = turn.cloneNode(true);
+            const trash = ['.actions-container', '.turn-footer', 'button', 'mat-icon', 'ms-grounding-sources', 'ms-search-entry-point'];
+            trash.forEach(s => clone.querySelectorAll(s).forEach(e => e.remove()));
+
+            let text = htmlToMarkdown(clone);
+
+            if (text.length > 0) collectedData.set(turn.id, { role, text });
+        });
+    }
+
+    function htmlToMarkdown(node, listContext = null) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            return node.textContent;
+        }
+
+        if (node.nodeType !== Node.ELEMENT_NODE) return '';
+
+        const tag = node.tagName.toLowerCase();
+
+        // Images
+        if (tag === 'img') {
+            const alt = node.getAttribute('alt') || '';
+            const src = node.getAttribute('src') || '';
+            return `![${alt}](${src})`;
+        }
+
+        // Code blocks
+        if (tag === 'pre') {
+            const codeEl = node.querySelector('code');
+            if (codeEl) {
+                const language = Array.from(codeEl.classList).find(c => c.startsWith('language-'))?.replace('language-', '') || '';
+                const code = codeEl.textContent;
+                return `\n\`\`\`${language}\n${code}\n\`\`\`\n`;
+            }
+        }
+
+        // Inline code
+        if (tag === 'code') {
+            const text = node.textContent;
+            // Handle backticks inside inline code for correct Markdown rendering.
+            if (text.includes('`')) {
+                return `\`\` ${text} \`\``;
+            }
+            return `\`${text}\``;
+        }
+
+        // Headings
+        if (/^h[1-6]$/.test(tag)) {
+            const level = parseInt(tag[1]);
+            return '\n' + '#'.repeat(level) + ' ' + getChildrenText(node, listContext) + '\n';
+        }
+
+        // Bold
+        if (tag === 'strong' || tag === 'b') {
+            return `**${getChildrenText(node, listContext)}**`;
+        }
+
+        // Italic
+        if (tag === 'em' || tag === 'i') {
+            return `*${getChildrenText(node, listContext)}*`;
+        }
+
+        // Links
+        if (tag === 'a') {
+            const href = node.getAttribute('href') || '';
+            const text = getChildrenText(node, listContext);
+            return `[${text}](${href})`;
+        }
+
+        // Lists - pass context to children
+        if (tag === 'ul' || tag === 'ol') {
+            const listType = tag; // 'ul' or 'ol'
+            let index = 0;
+            let result = '\n';
+
+            for (const child of node.childNodes) {
+                if (child.nodeType === Node.ELEMENT_NODE && child.tagName.toLowerCase() === 'li') {
+                    index++;
+                    result += htmlToMarkdown(child, { type: listType, index: index });
+                } else {
+                    result += htmlToMarkdown(child);
+                }
+            }
+
+            return result + '\n';
+        }
+
+        // List items - use context to determine format
+        if (tag === 'li') {
+            const content = getChildrenText(node, listContext).trim();
+            if (listContext && listContext.type === 'ol') {
+                return `${listContext.index}. ${content}\n`;
+            } else {
+                return `- ${content}\n`;
+            }
+        }
+
+        // Line breaks
+        if (tag === 'br') {
+            return '\n';
+        }
+
+        // Blockquotes - prefix each line with >
+        if (tag === 'blockquote') {
+            const content = getChildrenText(node, listContext);
+            // Split by lines and prefix each with "> "
+            return '\n' + content.split('\n')
+                .map(line => `> ${line}`)
+                .join('\n') + '\n';
+        }
+
+        // Block elements
+        if (['div', 'p'].includes(tag)) {
+            return '\n' + getChildrenText(node, listContext) + '\n';
+        }
+
+        return getChildrenText(node, listContext);
+    }
+
+    function getChildrenText(node, listContext = null) {
+        return Array.from(node.childNodes).map(child => htmlToMarkdown(child, listContext)).join('');
+    }
+
+    // Helper: Download text-only mode
+    function downloadTextOnly() {
+        let content = `# ${t('file_header')}\n\n`;
+        content += `**${t('file_time')}:** ${new Date().toLocaleString()}\n\n`;
+        content += `**${t('file_count')}:** ${collectedData.size}\n\n`;
+        content += "---\n\n";
+
+        for (const [id, item] of collectedData) {
+            const roleName = item.role === 'Gemini' ? t('role_gemini') : t('role_user');
+            content += `## ${roleName}\n\n${item.text}\n\n`;
+            content += `---\n\n`;
+        }
+
+        const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+        downloadBlob(blob, `Gemini_Chat_v14_${Date.now()}.md`);
+    }
+
+    // Generic Helper: Process resources (images or files)
+    async function processResources(allText, zipFolder, config) {
+        const resourceMap = new Map();
+        const matches = [...allText.matchAll(config.regex)];
+        const uniqueUrls = new Set();
+
+        for (const match of matches) {
+            if (config.filter && !config.filter(match)) continue;
+            const url = match[2]; // Assuming group 2 is always URL
+            uniqueUrls.add(url);
+        }
+
+        if (uniqueUrls.size > 0) {
+            updateUI('SCROLLING', t(config.statusStart, { n: uniqueUrls.size }));
+            let completedCount = 0;
+
+            const promises = Array.from(uniqueUrls).map(async (url, index) => {
+                try {
+                    const blob = await fetchResource(url);
+                    if (blob) {
+                        const filename = config.filenameGenerator(url, index, blob);
+                        zipFolder.file(filename, blob);
+                        resourceMap.set(url, `${config.subDir}/${filename}`);
+                    }
+                } catch (e) {
+                    console.error(`${config.subDir} download failed:`, url, e);
+                }
+                completedCount++;
+                if (completedCount % 5 === 0 || completedCount === uniqueUrls.size) {
+                    updateUI('SCROLLING', t(config.statusProgress, { c: completedCount, t: uniqueUrls.size }));
+                }
+            });
+
+            await Promise.all(promises);
+        }
+        return resourceMap;
+    }
+
+    // Helper: Process and download images
+    async function processImages(allText, imgFolder) {
+        return processResources(allText, imgFolder, {
+            regex: IMG_REGEX,
+            subDir: 'images',
+            statusStart: 'status_packaging_images',
+            statusProgress: 'status_packaging_images_progress',
+            filenameGenerator: (url, index, blob) => {
+                const extension = (blob.type.split('/')[1] || 'png').split('+')[0];
+                return `image_${index}.${extension}`;
+            }
+        });
+    }
+
+    // Helper: Process and download files
+    async function processFiles(allText, fileFolder) {
+        const downloadableExtensions = ['.pdf', '.csv', '.txt', '.json', '.py', '.js', '.html', '.css', '.md', '.zip', '.tar', '.gz'];
+        return processResources(allText, fileFolder, {
+            regex: LINK_REGEX,
+            subDir: 'files',
+            statusStart: 'status_packaging_files',
+            statusProgress: 'status_packaging_files_progress',
+            filter: (match) => {
+                if (match[0].startsWith('!')) return false;
+                const url = match[2];
+                const lowerUrl = url.toLowerCase();
+                const isBlob = lowerUrl.startsWith('blob:');
+                const isGoogleStorage = lowerUrl.includes('googlestorage') || lowerUrl.includes('googleusercontent');
+                const hasExt = downloadableExtensions.some(ext => lowerUrl.split('?')[0].endsWith(ext));
+                return isBlob || isGoogleStorage || hasExt;
+            },
+            filenameGenerator: (url, index, blob) => {
+                let filename = "file";
+                try {
+                    const urlObj = new URL(url);
+                    filename = urlObj.pathname.substring(urlObj.pathname.lastIndexOf('/') + 1);
+                } catch (e) {
+                    filename = url.split('/').pop().split('?')[0];
+                }
+
+                let decodedFilename = filename;
+                try {
+                    decodedFilename = decodeURIComponent(filename);
+                } catch (e) {
+                    console.warn(`Could not decode filename: ${filename}`, e);
+                }
+                // Increased limit from 50 to 100 as per PR review
+                if (!decodedFilename || decodedFilename.length > 100) decodedFilename = `file_${index}`;
+                return `${index}_${decodedFilename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+            }
+        });
+    }
+
+    // Helper: Generate Markdown content with URL replacements
+    function generateMarkdownContent(imgMap, fileMap) {
+        let content = `# ${t('file_header')}\n\n`;
+        content += `**${t('file_time')}:** ${new Date().toLocaleString()}\n\n`;
+        content += `**${t('file_count')}:** ${collectedData.size}\n\n`;
+        content += "---\n\n";
+
+        for (const [id, item] of collectedData) {
+            const roleName = item.role === 'Gemini' ? t('role_gemini') : t('role_user');
+            let processedText = item.text;
+
+            // Replace image URLs
+            processedText = processedText.replace(IMG_REGEX, (match, alt, url, title) => {
+                if (imgMap.has(url)) {
+                    const titleStr = title || '';
+                    return `![${alt}](${imgMap.get(url)}${titleStr})`;
+                }
+                return match;
+            });
+
+            // Replace file URLs
+            processedText = processedText.replace(LINK_REGEX, (match, text, url, title) => {
+                if (fileMap.has(url)) {
+                    const titleStr = title || '';
+                    return `[${text}](${fileMap.get(url)}${titleStr})`;
+                }
+                return match;
+            });
+
+            content += `## ${roleName}\n\n${processedText}\n\n`;
+            content += `---\n\n`;
+        }
+
+        return content;
+    }
+
+    // Main function: orchestrate the download process
+    async function downloadCollectedData() {
+        if (collectedData.size === 0) return false;
+
+        // Text-only mode
+        if (exportMode === 'text') {
+            downloadTextOnly();
+            return true;
+        }
+
+        // Full mode with attachments
+        const zip = new JSZip();
+        const imgFolder = zip.folder("images");
+        const fileFolder = zip.folder("files");
+
+        const allText = Array.from(collectedData.values()).map(v => v.text).join('\n');
+
+        // Process images and files in parallel
+        const [imgMap, fileMap] = await Promise.all([
+            processImages(allText, imgFolder),
+            processFiles(allText, fileFolder)
+        ]);
+
+        // Generate final Markdown content
+        const content = generateMarkdownContent(imgMap, fileMap);
+
+        // Create and download ZIP
+        zip.file("chat_history.md", content);
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        cachedZipBlob = zipBlob;
+        downloadBlob(zipBlob, `Gemini_Chat_v14_${Date.now()}.zip`);
+
         return true;
     }
 
-    // Full mode with attachments
-    const zip = new JSZip();
-    const imgFolder = zip.folder("images");
-    const fileFolder = zip.folder("files");
+    function fetchResource(url) {
+        return new Promise((resolve) => {
+            if (typeof GM_xmlhttpRequest !== 'undefined') {
+                GM_xmlhttpRequest({
+                    method: "GET",
+                    url: url,
+                    responseType: "blob",
+                    onload: (response) => resolve(response.response),
+                    onerror: () => resolve(null)
+                });
+            } else {
+                fetch(url)
+                    .then(r => r.blob())
+                    .then(resolve)
+                    .catch(() => resolve(null));
+            }
+        });
+    }
 
-    const allText = Array.from(collectedData.values()).map(v => v.text).join('\n');
+    function downloadBlob(blob, name) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
 
-    // Process images and files in parallel
-    const [imgMap, fileMap] = await Promise.all([
-        processImages(allText, imgFolder),
-        processFiles(allText, fileFolder)
-    ]);
+    function endProcess(status, msg) {
+        if (hasFinished) return;
+        hasFinished = true;
+        isRunning = false;
 
-    // Generate final Markdown content
-    const content = generateMarkdownContent(imgMap, fileMap);
-
-    // Create and download ZIP
-    zip.file("chat_history.md", content);
-    const zipBlob = await zip.generateAsync({ type: "blob" });
-    cachedZipBlob = zipBlob;
-    downloadBlob(zipBlob, `Gemini_Chat_v14_${Date.now()}.zip`);
-
-    return true;
-}
-
-function fetchResource(url) {
-    return new Promise((resolve) => {
-        if (typeof GM_xmlhttpRequest !== 'undefined') {
-            GM_xmlhttpRequest({
-                method: "GET",
-                url: url,
-                responseType: "blob",
-                onload: (response) => resolve(response.response),
-                onerror: () => resolve(null)
-            });
+        if (status === "FINISHED") {
+            if (collectedData.size > 0) {
+                downloadCollectedData().then(() => {
+                    updateUI('FINISHED', collectedData.size);
+                }).catch(err => {
+                    console.error("Failed to generate and download file:", err);
+                    updateUI('ERROR', t('err_runtime') + err.message);
+                });
+            } else {
+                updateUI('ERROR', t('err_no_data'));
+            }
         } else {
-            fetch(url)
-                .then(r => r.blob())
-                .then(resolve)
-                .catch(() => resolve(null));
+            updateUI('ERROR', msg);
+        }
+    }
+
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && isRunning) {
+            endProcess("FINISHED");
         }
     });
-}
 
-function downloadBlob(blob, name) {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = name;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-}
-
-function endProcess(status, msg) {
-    if (hasFinished) return;
-    hasFinished = true;
-    isRunning = false;
-
-    if (status === "FINISHED") {
-        if (collectedData.size > 0) {
-            downloadCollectedData().then(() => {
-                updateUI('FINISHED', collectedData.size);
-            }).catch(err => {
-                console.error("Failed to generate and download file:", err);
-                updateUI('ERROR', t('err_runtime') + err.message);
-            });
-        } else {
-            updateUI('ERROR', t('err_no_data'));
-        }
-    } else {
-        updateUI('ERROR', msg);
-    }
-}
-
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && isRunning) {
-        endProcess("FINISHED");
-    }
-});
-
-setInterval(createEntryButton, 2000);
-}) ();
+    setInterval(createEntryButton, 2000);
+})();
