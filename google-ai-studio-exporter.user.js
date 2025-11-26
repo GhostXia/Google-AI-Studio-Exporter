@@ -421,7 +421,12 @@
         } else if (state === 'SCROLLING') {
             titleEl.innerText = t('title_scrolling');
             statusEl.innerHTML = t('status_scrolling');
+            countEl.style.display = 'block';
             countEl.innerText = msg;
+        } else if (state === 'PACKAGING') {
+            titleEl.innerText = t('title_scrolling');
+            statusEl.innerHTML = msg;
+            countEl.style.display = 'none';
         } else if (state === 'FINISHED') {
             titleEl.innerText = t('title_finished');
             statusEl.innerHTML = t('status_finished');
@@ -674,7 +679,7 @@
         });
     }
 
-    function htmlToMarkdown(node, listContext = null) {
+    function htmlToMarkdown(node, listContext = null, indent = 0) {
         if (node.nodeType === Node.TEXT_NODE) {
             return node.textContent;
         }
@@ -713,23 +718,23 @@
         // Headings
         if (/^h[1-6]$/.test(tag)) {
             const level = parseInt(tag[1]);
-            return '\n' + '#'.repeat(level) + ' ' + getChildrenText(node, listContext) + '\n';
+            return '\n' + '#'.repeat(level) + ' ' + getChildrenText(node, listContext, indent) + '\n';
         }
 
         // Bold
         if (tag === 'strong' || tag === 'b') {
-            return `**${getChildrenText(node, listContext)}**`;
+            return `**${getChildrenText(node, listContext, indent)}**`;
         }
 
         // Italic
         if (tag === 'em' || tag === 'i') {
-            return `*${getChildrenText(node, listContext)}*`;
+            return `*${getChildrenText(node, listContext, indent)}*`;
         }
 
         // Links
         if (tag === 'a') {
             const href = node.getAttribute('href') || '';
-            const text = getChildrenText(node, listContext);
+            const text = getChildrenText(node, listContext, indent);
             return `[${text}](${href})`;
         }
 
@@ -742,9 +747,9 @@
             for (const child of node.childNodes) {
                 if (child.nodeType === Node.ELEMENT_NODE && child.tagName.toLowerCase() === 'li') {
                     index++;
-                    result += htmlToMarkdown(child, { type: listType, index: index });
+                    result += htmlToMarkdown(child, { type: listType, index: index }, indent);
                 } else {
-                    result += htmlToMarkdown(child);
+                    result += htmlToMarkdown(child, listContext, indent);
                 }
             }
 
@@ -753,11 +758,12 @@
 
         // List items - use context to determine format
         if (tag === 'li') {
-            const content = getChildrenText(node, listContext).trim();
+            const content = getChildrenText(node, listContext, indent + 1);
+            const indentStr = '  '.repeat(indent);
             if (listContext && listContext.type === 'ol') {
-                return `${listContext.index}. ${content}\n`;
+                return `${indentStr}${listContext.index}. ${content}\n`;
             } else {
-                return `- ${content}\n`;
+                return `${indentStr}- ${content}\n`;
             }
         }
 
@@ -768,7 +774,7 @@
 
         // Blockquotes - prefix each line with >
         if (tag === 'blockquote') {
-            const content = getChildrenText(node, listContext);
+            const content = getChildrenText(node, listContext, indent);
             // Split by lines and prefix each with "> "
             return '\n' + content.split('\n')
                 .map(line => `> ${line}`)
@@ -777,14 +783,14 @@
 
         // Block elements
         if (['div', 'p'].includes(tag)) {
-            return '\n' + getChildrenText(node, listContext) + '\n';
+            return '\n' + getChildrenText(node, listContext, indent) + '\n';
         }
 
-        return getChildrenText(node, listContext);
+        return getChildrenText(node, listContext, indent);
     }
 
-    function getChildrenText(node, listContext = null) {
-        return Array.from(node.childNodes).map(child => htmlToMarkdown(child, listContext)).join('');
+    function getChildrenText(node, listContext = null, indent = 0) {
+        return Array.from(node.childNodes).map(child => htmlToMarkdown(child, listContext, indent)).join('');
     }
 
     // Helper: Download text-only mode
@@ -809,7 +815,7 @@
         const resourceMap = new Map();
 
         if (uniqueUrls.size > 0) {
-            updateUI('SCROLLING', t(config.statusStart, { n: uniqueUrls.size }));
+            updateUI('PACKAGING', t(config.statusStart, { n: uniqueUrls.size }));
             let completedCount = 0;
 
             const promises = Array.from(uniqueUrls).map(async (url, index) => {
@@ -825,7 +831,7 @@
                 }
                 completedCount++;
                 if (completedCount % 5 === 0 || completedCount === uniqueUrls.size) {
-                    updateUI('SCROLLING', t(config.statusProgress, { c: completedCount, t: uniqueUrls.size }));
+                    updateUI('PACKAGING', t(config.statusProgress, { c: completedCount, t: uniqueUrls.size }));
                 }
             });
 
@@ -993,12 +999,21 @@
                     method: "GET",
                     url: url,
                     responseType: "blob",
-                    onload: (response) => resolve(response.response),
+                    onload: (response) => {
+                        if (response.status >= 200 && response.status < 300) {
+                            resolve(response.response);
+                        } else {
+                            resolve(null);
+                        }
+                    },
                     onerror: () => resolve(null)
                 });
             } else {
                 fetch(url)
-                    .then(r => r.blob())
+                    .then(r => {
+                        if (r.ok) return r.blob();
+                        return null;
+                    })
                     .then(resolve)
                     .catch(() => resolve(null));
             }
