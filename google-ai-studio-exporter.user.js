@@ -2,7 +2,7 @@
 // @name         Google AI Studio Exporter
 // @name:zh-CN   Google AI Studio 对话导出器
 // @namespace    https://github.com/GhostXia/Google-AI-Studio-Exporter
-// @version      1.3.4
+// @version      1.3.5
 // @description  Export your Gemini chat history from Google AI Studio to a text file. Features: Auto-scrolling, User/Model role differentiation, clean output, and full mobile optimization.
 // @description:zh-CN 完美导出 Google AI Studio 对话记录。具备自动滚动加载、精准去重、防抖动、User/Model角色区分，以及全平台响应式优化。支持 PC、平板、手机全平台。
 // @author       GhostXia
@@ -14,6 +14,8 @@
 // @downloadURL  https://github.com/GhostXia/Google-AI-Studio-Exporter/raw/main/google-ai-studio-exporter.user.js
 // @updateURL    https://github.com/GhostXia/Google-AI-Studio-Exporter/raw/main/google-ai-studio-exporter.user.js
 // @grant        none
+// @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js
+// @grant        GM_xmlhttpRequest
 // ==/UserScript==
 
 (function () {
@@ -365,9 +367,12 @@
         const saveBtn = overlay.querySelector('#ai-save-btn');
 
         closeBtn.onclick = () => { overlay.style.display = 'none'; };
-        saveBtn.onclick = () => {
-            if (!downloadCollectedData()) {
-                alert(t('err_no_data'));
+        saveBtn.onclick = async () => {
+            const result = await downloadCollectedData();
+            if (!result) {
+                updateUI('ERROR', t('err_no_data'));
+            } else {
+                updateUI('FINISHED', collectedData.size);
             }
         };
     }
@@ -560,21 +565,171 @@
     // 5. 辅助功能
     // ==========================================
 
-    function downloadCollectedData() {
-        if (collectedData.size > 0) {
-            let content = t('file_header') + "\n";
-            content += `${t('file_time')}: ${new Date().toLocaleString()}\n`;
-            content += `${t('file_count')}: ${collectedData.size}\n`;
-            content += "========================================\n\n";
 
-            for (const [id, item] of collectedData) {
-                content += `### ${item.role === 'Gemini' ? t('role_gemini') : t('role_user')}:\n${item.text}\n`;
-                content += `----------------------------------------------------------------\n\n`;
+    // ==========================================
+    // 5. 辅助功能
+    // ==========================================
+
+    async function downloadCollectedData() {
+        if (collectedData.size === 0) return false;
+
+        const zip = new JSZip();
+        const imgFolder = zip.folder("images");
+        const fileFolder = zip.folder("files");
+        const imgMap = new Map(); // url -> localPath
+        const fileMap = new Map(); // url -> localPath
+
+        const allText = Array.from(collectedData.values()).map(v => v.text).join('\n');
+
+        // 1. 处理图片
+        const imgRegex = /!\[.*?\]\((.*?)\)/g;
+        const imgMatches = [...allText.matchAll(imgRegex)];
+        const uniqueImgUrls = new Set(imgMatches.map(m => m[1]));
+
+        if (uniqueImgUrls.size > 0) {
+            updateUI('SCROLLING', `正在打包 ${uniqueImgUrls.size} 张图片...`);
+            let count = 0;
+            for (const url of uniqueImgUrls) {
+                try {
+                    const finalName = `image_${count}_${Date.now()}.png`;
+                    const blob = await fetchResource(url);
+                    if (blob) {
+                        imgFolder.file(finalName, blob);
+                        imgMap.set(url, `images/${finalName}`);
+                    }
+                    count++;
+                    updateUI('SCROLLING', `打包图片: ${count}/${uniqueImgUrls.size}`);
+                } catch (e) {
+                    console.error("图片下载失败:", url, e);
+                }
             }
-            download(content, `Gemini_Chat_v14_${Date.now()}.txt`);
-            return true;
         }
-        return false;
+
+        // 2. 处理通用文件 (非图片链接)
+        // 匹配标准 Markdown 链接 [text](url)，排除图片链接（前面没有 !）
+        const linkRegex = /(?<!!)\[.*?\]\((.*?)\)/g;
+        const linkMatches = [...allText.matchAll(linkRegex)];
+        const uniqueFileUrls = new Set();
+
+        // 过滤需要下载的文件链接
+        const downloadableExtensions = ['.pdf', '.csv', '.txt', '.json', '.py', '.js', '.html', '.css', '.md', '.zip', '.tar', '.gz'];
+
+        for (const match of linkMatches) {
+            const url = match[1];
+            const lowerUrl = url.toLowerCase();
+
+            // 策略：下载 blob 链接，Google 存储链接，或常见文件后缀
+            const isBlob = lowerUrl.startsWith('blob:');
+            const isGoogleStorage = lowerUrl.includes('googlestorage') || lowerUrl.includes('googleusercontent');
+            const hasExt = downloadableExtensions.some(ext => lowerUrl.split('?')[0].endsWith(ext));
+
+            if (isBlob || isGoogleStorage || hasExt) {
+                uniqueFileUrls.add(url);
+            }
+        }
+
+        if (uniqueFileUrls.size > 0) {
+            updateUI('SCROLLING', `正在打包 ${uniqueFileUrls.size} 个文件...`);
+            let count = 0;
+            for (const url of uniqueFileUrls) {
+                try {
+                    // 尝试提取文件名
+                    let filename = "file";
+                    try {
+                        const urlObj = new URL(url);
+                        const pathName = urlObj.pathname;
+                        filename = pathName.substring(pathName.lastIndexOf('/') + 1);
+                    } catch (e) {
+                        filename = url.split('/').pop().split('?')[0];
+                    }
+
+                    if (!filename || filename.length > 50) filename = `file_${count}`;
+
+                    // 确保文件名唯一
+                    const timestamp = Date.now();
+                    const finalName = `${count}_${timestamp}_${decodeURIComponent(filename).replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+
+                    const blob = await fetchResource(url);
+                    if (blob) {
+                        fileFolder.file(finalName, blob);
+                        fileMap.set(url, `files/${finalName}`);
+                    }
+                    count++;
+                    updateUI('SCROLLING', `打包文件: ${count}/${uniqueFileUrls.size}`);
+                } catch (e) {
+                    console.error("文件下载失败:", url, e);
+                }
+            }
+        }
+
+        // 3. 替换链接并生成 Markdown
+        let content = `# ${t('file_header')}\n\n`;
+        content += `**${t('file_time')}:** ${new Date().toLocaleString()}\n\n`;
+        content += `**${t('file_count')}:** ${collectedData.size}\n\n`;
+        content += "---\n\n";
+
+        for (const [id, item] of collectedData) {
+            const roleName = item.role === 'Gemini' ? t('role_gemini') : t('role_user');
+            let processedText = item.text;
+
+            // 替换图片链接
+            processedText = processedText.replace(imgRegex, (match, url) => {
+                if (imgMap.has(url)) {
+                    return match.replace(url, imgMap.get(url));
+                }
+                return match;
+            });
+
+            // 替换文件链接
+            processedText = processedText.replace(linkRegex, (match, url) => {
+                if (fileMap.has(url)) {
+                    return match.replace(url, fileMap.get(url));
+                }
+                return match;
+            });
+
+            content += `## ${roleName}\n\n${processedText}\n\n`;
+            content += `---\n\n`;
+        }
+
+        zip.file("chat_history.md", content);
+
+        // 4. 生成并下载 ZIP
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        downloadBlob(zipBlob, `Gemini_Chat_v14_${Date.now()}.zip`);
+
+        return true;
+    }
+
+    function fetchResource(url) {
+        return new Promise((resolve) => {
+            // 尝试使用 GM_xmlhttpRequest 跨域 (如果可用)
+            if (typeof GM_xmlhttpRequest !== 'undefined') {
+                GM_xmlhttpRequest({
+                    method: "GET",
+                    url: url,
+                    responseType: "blob",
+                    onload: (response) => resolve(response.response),
+                    onerror: () => resolve(null)
+                });
+            } else {
+                // 否则使用 fetch (可能受 CORS 限制)
+                fetch(url)
+                    .then(r => r.blob())
+                    .then(resolve)
+                    .catch(() => resolve(null));
+            }
+        });
+    }
+
+    function downloadBlob(blob, name) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
     }
 
     function endProcess(status, msg) {
@@ -583,63 +738,16 @@
         isRunning = false;
 
         if (status === "FINISHED") {
-            if (downloadCollectedData()) {
-                updateUI('FINISHED', collectedData.size);
+            if (collectedData.size > 0) {
+                downloadCollectedData().then(() => {
+                    updateUI('FINISHED', collectedData.size);
+                });
             } else {
                 updateUI('ERROR', t('err_no_data'));
             }
         } else {
             updateUI('ERROR', msg);
         }
-    }
-
-    function findRealScroller() {
-        const bubble = document.querySelector('ms-chat-turn');
-        if (!bubble) {
-            return document.querySelector('div[class*="scroll"]') || document.body;
-        }
-
-        let el = bubble.parentElement;
-        while (el && el !== document.body) {
-            const style = window.getComputedStyle(el);
-            if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && el.scrollHeight >= el.clientHeight) {
-                return el;
-            }
-            el = el.parentElement;
-        }
-        return document.documentElement;
-    }
-
-    function captureData() {
-        const turns = document.querySelectorAll('ms-chat-turn');
-        turns.forEach(turn => {
-            if (!turn.id || collectedData.has(turn.id)) return;
-
-            const role = (turn.querySelector('[data-turn-role="Model"]') || turn.innerHTML.includes('model-prompt-container')) ? "Gemini" : "User";
-
-            const clone = turn.cloneNode(true);
-            const trash = ['.actions-container', '.turn-footer', 'button', 'mat-icon', 'ms-grounding-sources', 'ms-search-entry-point'];
-            trash.forEach(s => clone.querySelectorAll(s).forEach(e => e.remove()));
-
-            let text = clone.innerText
-                .replace(/edit\s*more_vert/gi, '')
-                .replace(/more_vert/gi, '')
-                .replace(/Run\s*Delete/gi, '')
-                .trim();
-
-            if (text.length > 0) collectedData.set(turn.id, { role, text });
-        });
-    }
-
-    function download(text, name) {
-        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = name;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
     }
 
     function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
