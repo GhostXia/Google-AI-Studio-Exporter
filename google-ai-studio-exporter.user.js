@@ -896,21 +896,21 @@
             let processedText = item.text;
 
             // Replace image URLs
-            processedText = processedText.replace(imgRegex, (match, url) => {
+            processedText = processedText.replace(imgRegex, (match, prefix, url, suffix) => {
                 if (imgMap.has(url)) {
-                    return match.slice(0, -1 - url.length) + imgMap.get(url) + ')';
+                    return prefix + imgMap.get(url) + suffix;
                 }
                 return match;
             });
 
-            // Replace file URLs (skip image links)
-            processedText = processedText.replace(linkRegex, (match, url) => {
-                // Skip image links
+            // Replace file URLs
+            processedText = processedText.replace(linkRegex, (match, prefix, url, suffix) => {
+                // Skip image links, which are also matched by linkRegex
                 if (match.startsWith('!')) {
                     return match;
                 }
                 if (fileMap.has(url)) {
-                    return match.slice(0, -1 - url.length) + fileMap.get(url) + ')';
+                    return prefix + fileMap.get(url) + suffix;
                 }
                 return match;
             });
