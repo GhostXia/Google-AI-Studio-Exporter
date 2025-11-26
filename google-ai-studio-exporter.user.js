@@ -854,8 +854,14 @@
                         filename = url.split('/').pop().split('?')[0];
                     }
 
-                    if (!filename || filename.length > 50) filename = `file_${index}`;
-                    const finalName = `${index}_${decodeURIComponent(filename).replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+                    let decodedFilename = filename;
+                    try {
+                        decodedFilename = decodeURIComponent(filename);
+                    } catch (e) {
+                        console.warn(`Could not decode filename: ${filename}`, e);
+                    }
+                    if (!decodedFilename || decodedFilename.length > 50) decodedFilename = `file_${index}`;
+                    const finalName = `${index}_${decodedFilename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
 
                     const blob = await fetchResource(url);
                     if (blob) {
