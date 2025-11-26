@@ -39,6 +39,10 @@
             'title_finished': '🎉 导出成功',
             'status_finished': '文件已生成。<br>请检查下载栏。',
             'title_error': '❌ 出错了',
+            'title_mode_select': '选择导出模式',
+            'status_mode_select': '请选择导出格式',
+            'btn_mode_full': '📦 包含附件',
+            'btn_mode_text': '📄 纯文本',
             'file_header': 'Google AI Studio 完整对话记录',
             'file_time': '时间',
             'file_count': '条数',
@@ -61,6 +65,10 @@
             'title_finished': '🎉 Finished',
             'status_finished': 'File generated.<br>Check your downloads.',
             'title_error': '❌ Error',
+            'title_mode_select': 'Select Export Mode',
+            'status_mode_select': 'Choose export format',
+            'btn_mode_full': '📦 With Attachments',
+            'btn_mode_text': '📄 Text Only',
             'file_header': 'Google AI Studio Chat History',
             'file_time': 'Time',
             'file_count': 'Count',
@@ -326,6 +334,7 @@
     let hasFinished = false;
     let collectedData = new Map();
     let overlay, titleEl, statusEl, countEl, closeBtn;
+    let exportMode = null; // 'full' or 'text'
 
     // ==========================================
     // 3. UI 逻辑
@@ -367,8 +376,9 @@
         const saveBtn = overlay.querySelector('#ai-save-btn');
 
         closeBtn.onclick = () => { overlay.style.display = 'none'; };
-        saveBtn.onclick = () => {
-            if (!downloadCollectedData()) {
+        saveBtn.onclick = async () => {
+            const result = await downloadCollectedData();
+            if (!result) {
                 alert(t('err_no_data'));
             }
         };
@@ -403,6 +413,32 @@
         }
     }
 
+    function showModeSelection() {
+        return new Promise((resolve) => {
+            initUI();
+            titleEl.innerText = t('title_mode_select');
+            statusEl.innerHTML = t('status_mode_select');
+            countEl.innerText = '';
+
+            const btnContainer = overlay.querySelector('.ai-btn-container');
+            btnContainer.style.display = 'flex';
+            btnContainer.innerHTML = `
+                <button id="ai-mode-full" class="ai-btn">${t('btn_mode_full')}</button>
+                <button id="ai-mode-text" class="ai-btn ai-btn-secondary">${t('btn_mode_text')}</button>
+            `;
+
+            document.getElementById('ai-mode-full').onclick = () => {
+                exportMode = 'full';
+                resolve('full');
+            };
+
+            document.getElementById('ai-mode-text').onclick = () => {
+                exportMode = 'text';
+                resolve('text');
+            };
+        });
+    }
+
     // ==========================================
     // 4. 核心流程
     // ==========================================
@@ -411,6 +447,9 @@
         isRunning = true;
         hasFinished = false;
         collectedData.clear();
+
+        // 显示模式选择
+        await showModeSelection();
 
         for (let i = 3; i > 0; i--) {
             updateUI('COUNTDOWN', i);
@@ -562,19 +601,33 @@
     // 5. 辅助功能
     // ==========================================
 
-
-    // ==========================================
-    // 5. 辅助功能
-    // ==========================================
-
     async function downloadCollectedData() {
         if (collectedData.size === 0) return false;
 
+        // 纯文本模式
+        if (exportMode === 'text') {
+            let content = `# ${t('file_header')}\n\n`;
+            content += `**${t('file_time')}:** ${new Date().toLocaleString()}\n\n`;
+            content += `**${t('file_count')}:** ${collectedData.size}\n\n`;
+            content += "---\n\n";
+
+            for (const [id, item] of collectedData) {
+                const roleName = item.role === 'Gemini' ? t('role_gemini') : t('role_user');
+                content += `## ${roleName}\n\n${item.text}\n\n`;
+                content += `---\n\n`;
+            }
+
+            const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+            downloadBlob(blob, `Gemini_Chat_v14_${Date.now()}.md`);
+            return true;
+        }
+
+        // 完整模式（包含附件）
         const zip = new JSZip();
         const imgFolder = zip.folder("images");
         const fileFolder = zip.folder("files");
-        const imgMap = new Map(); // url -> localPath
-        const fileMap = new Map(); // url -> localPath
+        const imgMap = new Map();
+        const fileMap = new Map();
 
         const allText = Array.from(collectedData.values()).map(v => v.text).join('\n');
 
@@ -588,9 +641,11 @@
             let count = 0;
             for (const url of uniqueImgUrls) {
                 try {
-                    const finalName = `image_${count}_${Date.now()}.png`;
                     const blob = await fetchResource(url);
                     if (blob) {
+                        // Get extension from MIME type, default to 'png'
+                        const extension = (blob.type.split('/')[1] || 'png').split('+')[0];
+                        const finalName = `image_${count}.${extension}`;
                         imgFolder.file(finalName, blob);
                         imgMap.set(url, `images/${finalName}`);
                     }
@@ -602,20 +657,15 @@
             }
         }
 
-        // 2. 处理通用文件 (非图片链接)
-        // 匹配标准 Markdown 链接 [text](url)，排除图片链接（前面没有 !）
+        // 2. 处理通用文件
         const linkRegex = /(?<!!)\[.*?\]\((.*?)\)/g;
         const linkMatches = [...allText.matchAll(linkRegex)];
         const uniqueFileUrls = new Set();
-
-        // 过滤需要下载的文件链接
         const downloadableExtensions = ['.pdf', '.csv', '.txt', '.json', '.py', '.js', '.html', '.css', '.md', '.zip', '.tar', '.gz'];
 
         for (const match of linkMatches) {
             const url = match[1];
             const lowerUrl = url.toLowerCase();
-
-            // 策略：下载 blob 链接，Google 存储链接，或常见文件后缀
             const isBlob = lowerUrl.startsWith('blob:');
             const isGoogleStorage = lowerUrl.includes('googlestorage') || lowerUrl.includes('googleusercontent');
             const hasExt = downloadableExtensions.some(ext => lowerUrl.split('?')[0].endsWith(ext));
@@ -630,21 +680,16 @@
             let count = 0;
             for (const url of uniqueFileUrls) {
                 try {
-                    // 尝试提取文件名
                     let filename = "file";
                     try {
                         const urlObj = new URL(url);
-                        const pathName = urlObj.pathname;
-                        filename = pathName.substring(pathName.lastIndexOf('/') + 1);
+                        filename = urlObj.pathname.substring(urlObj.pathname.lastIndexOf('/') + 1);
                     } catch (e) {
                         filename = url.split('/').pop().split('?')[0];
                     }
 
                     if (!filename || filename.length > 50) filename = `file_${count}`;
-
-                    // 确保文件名唯一
-                    const timestamp = Date.now();
-                    const finalName = `${count}_${timestamp}_${decodeURIComponent(filename).replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+                    const finalName = `${count}_${decodeURIComponent(filename).replace(/[^a-zA-Z0-9._-]/g, '_')}`;
 
                     const blob = await fetchResource(url);
                     if (blob) {
@@ -659,7 +704,7 @@
             }
         }
 
-        // 3. 替换链接并生成 Markdown
+        // 3. 生成 Markdown
         let content = `# ${t('file_header')}\n\n`;
         content += `**${t('file_time')}:** ${new Date().toLocaleString()}\n\n`;
         content += `**${t('file_count')}:** ${collectedData.size}\n\n`;
@@ -669,18 +714,16 @@
             const roleName = item.role === 'Gemini' ? t('role_gemini') : t('role_user');
             let processedText = item.text;
 
-            // 替换图片链接
             processedText = processedText.replace(imgRegex, (match, url) => {
                 if (imgMap.has(url)) {
-                    return match.replace(url, imgMap.get(url));
+                    return match.slice(0, -1 - url.length) + imgMap.get(url) + ')';
                 }
                 return match;
             });
 
-            // 替换文件链接
             processedText = processedText.replace(linkRegex, (match, url) => {
                 if (fileMap.has(url)) {
-                    return match.replace(url, fileMap.get(url));
+                    return match.slice(0, -1 - url.length) + fileMap.get(url) + ')';
                 }
                 return match;
             });
@@ -690,8 +733,6 @@
         }
 
         zip.file("chat_history.md", content);
-
-        // 4. 生成并下载 ZIP
         const zipBlob = await zip.generateAsync({ type: "blob" });
         downloadBlob(zipBlob, `Gemini_Chat_v14_${Date.now()}.zip`);
 
@@ -700,7 +741,6 @@
 
     function fetchResource(url) {
         return new Promise((resolve) => {
-            // 尝试使用 GM_xmlhttpRequest 跨域 (如果可用)
             if (typeof GM_xmlhttpRequest !== 'undefined') {
                 GM_xmlhttpRequest({
                     method: "GET",
@@ -710,7 +750,6 @@
                     onerror: () => resolve(null)
                 });
             } else {
-                // 否则使用 fetch (可能受 CORS 限制)
                 fetch(url)
                     .then(r => r.blob())
                     .then(resolve)
@@ -738,6 +777,9 @@
             if (collectedData.size > 0) {
                 downloadCollectedData().then(() => {
                     updateUI('FINISHED', collectedData.size);
+                }).catch(err => {
+                    console.error("Failed to generate and download file:", err);
+                    updateUI('ERROR', t('err_runtime') + err.message);
                 });
             } else {
                 updateUI('ERROR', t('err_no_data'));
