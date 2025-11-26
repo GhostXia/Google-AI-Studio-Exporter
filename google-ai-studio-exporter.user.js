@@ -91,8 +91,9 @@
         let str = translations[lang][key] || key;
         // Legacy support for single parameter
         if (typeof params !== 'object' || params === null) {
-            str = str.replace('{s}', params);
+            str = str.replace(/{s}/g, params);
             return str;
+        }
         }
         for (const pKey in params) {
             str = str.replace(new RegExp(`\\{${pKey}\\}`, 'g'), params[pKey]);
