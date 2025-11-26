@@ -739,7 +739,7 @@
                     index++;
                     result += htmlToMarkdown(child, { type: listType, index: index });
                 } else {
-                    result += htmlToMarkdown(child, { type: listType, index: index });
+                    result += htmlToMarkdown(child);
                 }
             }
 
