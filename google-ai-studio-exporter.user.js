@@ -805,16 +805,8 @@
     }
 
     // Generic Helper: Process resources (images or files)
-    async function processResources(allText, zipFolder, config) {
+    async function processResources(uniqueUrls, zipFolder, config) {
         const resourceMap = new Map();
-        const matches = [...allText.matchAll(config.regex)];
-        const uniqueUrls = new Set();
-
-        for (const match of matches) {
-            if (config.filter && !config.filter(match)) continue;
-            const url = match[2]; // Assuming group 2 is always URL
-            uniqueUrls.add(url);
-        }
 
         if (uniqueUrls.size > 0) {
             updateUI('SCROLLING', t(config.statusStart, { n: uniqueUrls.size }));
@@ -842,10 +834,21 @@
         return resourceMap;
     }
 
+    // Helper: Collect unique image URLs from all messages
+    function collectImageUrls() {
+        const uniqueUrls = new Set();
+        for (const item of collectedData.values()) {
+            for (const match of item.text.matchAll(IMG_REGEX)) {
+                uniqueUrls.add(match[2]);
+            }
+        }
+        return uniqueUrls;
+    }
+
     // Helper: Process and download images
-    async function processImages(allText, imgFolder) {
-        return processResources(allText, imgFolder, {
-            regex: IMG_REGEX,
+    async function processImages(imgFolder) {
+        const uniqueUrls = collectImageUrls();
+        return processResources(uniqueUrls, imgFolder, {
             subDir: 'images',
             statusStart: 'status_packaging_images',
             statusProgress: 'status_packaging_images_progress',
@@ -856,23 +859,38 @@
         });
     }
 
-    // Helper: Process and download files
-    async function processFiles(allText, fileFolder) {
+    // Helper: Collect unique file URLs from all messages
+    function collectFileUrls() {
         const downloadableExtensions = ['.pdf', '.csv', '.txt', '.json', '.py', '.js', '.html', '.css', '.md', '.zip', '.tar', '.gz'];
-        return processResources(allText, fileFolder, {
-            regex: LINK_REGEX,
+        const uniqueUrls = new Set();
+
+        const fileFilter = (match) => {
+            if (match[0].startsWith('!')) return false;
+            const url = match[2];
+            const lowerUrl = url.toLowerCase();
+            const isBlob = lowerUrl.startsWith('blob:');
+            const isGoogleStorage = lowerUrl.includes('googlestorage') || lowerUrl.includes('googleusercontent');
+            const hasExt = downloadableExtensions.some(ext => lowerUrl.split('?')[0].endsWith(ext));
+            return isBlob || isGoogleStorage || hasExt;
+        };
+
+        for (const item of collectedData.values()) {
+            for (const match of item.text.matchAll(LINK_REGEX)) {
+                if (fileFilter(match)) {
+                    uniqueUrls.add(match[2]);
+                }
+            }
+        }
+        return uniqueUrls;
+    }
+
+    // Helper: Process and download files
+    async function processFiles(fileFolder) {
+        const uniqueUrls = collectFileUrls();
+        return processResources(uniqueUrls, fileFolder, {
             subDir: 'files',
             statusStart: 'status_packaging_files',
             statusProgress: 'status_packaging_files_progress',
-            filter: (match) => {
-                if (match[0].startsWith('!')) return false;
-                const url = match[2];
-                const lowerUrl = url.toLowerCase();
-                const isBlob = lowerUrl.startsWith('blob:');
-                const isGoogleStorage = lowerUrl.includes('googlestorage') || lowerUrl.includes('googleusercontent');
-                const hasExt = downloadableExtensions.some(ext => lowerUrl.split('?')[0].endsWith(ext));
-                return isBlob || isGoogleStorage || hasExt;
-            },
             filenameGenerator: (url, index, blob) => {
                 let filename = "file";
                 try {
@@ -889,7 +907,11 @@
                     console.warn(`Could not decode filename: ${filename}`, e);
                 }
                 // Increased limit from 50 to 100 as per PR review
-                if (!decodedFilename || decodedFilename.length > 100) decodedFilename = `file_${index}`;
+                if (!decodedFilename || decodedFilename.length > 100) {
+                    const extMatch = filename.match(/\.[^./?]+$/);
+                    const ext = extMatch ? extMatch[0] : '';
+                    decodedFilename = `file_${index}${ext}`;
+                }
                 return `${index}_${decodedFilename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
             }
         });
@@ -946,12 +968,10 @@
         const imgFolder = zip.folder("images");
         const fileFolder = zip.folder("files");
 
-        const allText = Array.from(collectedData.values()).map(v => v.text).join('\n');
-
-        // Process images and files in parallel
+        // Process images and files in parallel (memory-efficient approach)
         const [imgMap, fileMap] = await Promise.all([
-            processImages(allText, imgFolder),
-            processFiles(allText, fileFolder)
+            processImages(imgFolder),
+            processFiles(fileFolder)
         ]);
 
         // Generate final Markdown content
