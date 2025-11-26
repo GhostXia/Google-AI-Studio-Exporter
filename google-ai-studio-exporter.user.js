@@ -376,9 +376,14 @@
 
         closeBtn.onclick = () => { overlay.style.display = 'none'; };
         saveBtn.onclick = async () => {
-            const result = await downloadCollectedData();
-            if (!result) {
-                updateUI('ERROR', t('err_no_data'));
+            try {
+                const result = await downloadCollectedData();
+                if (!result) {
+                    updateUI('ERROR', t('err_no_data'));
+                }
+            } catch (err) {
+                console.error("Failed to re-download file:", err);
+                updateUI('ERROR', t('err_runtime') + err.message);
             }
         };
     }
