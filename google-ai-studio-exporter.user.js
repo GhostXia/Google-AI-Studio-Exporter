@@ -367,12 +367,9 @@
         const saveBtn = overlay.querySelector('#ai-save-btn');
 
         closeBtn.onclick = () => { overlay.style.display = 'none'; };
-        saveBtn.onclick = async () => {
-            const result = await downloadCollectedData();
-            if (!result) {
-                updateUI('ERROR', t('err_no_data'));
-            } else {
-                updateUI('FINISHED', collectedData.size);
+        saveBtn.onclick = () => {
+            if (!downloadCollectedData()) {
+                alert(t('err_no_data'));
             }
         };
     }
