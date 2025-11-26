@@ -668,7 +668,7 @@
             const trash = ['.actions-container', '.turn-footer', 'button', 'mat-icon', 'ms-grounding-sources', 'ms-search-entry-point'];
             trash.forEach(s => clone.querySelectorAll(s).forEach(e => e.remove()));
 
-            let text = htmlToMarkdown(clone).trim();
+            let text = htmlToMarkdown(clone).trim().replace(/\n{3,}/g, '\n\n');
 
             if (text.length > 0) collectedData.set(turn.id, { role, text });
         });
