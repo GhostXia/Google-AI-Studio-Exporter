@@ -422,26 +422,42 @@
 
             const btnContainer = overlay.querySelector('.ai-btn-container');
             btnContainer.style.display = 'flex';
-            btnContainer.innerHTML = `
-                <button id="ai-mode-full" class="ai-btn" style="display: inline-block">${t('btn_mode_full')}</button>
-                <button id="ai-mode-text" class="ai-btn ai-btn-secondary" style="display: inline-block">${t('btn_mode_text')}</button>
-                <button id="ai-mode-close" class="ai-btn ai-btn-secondary" style="display: inline-block">${t('btn_close')}</button>
-            `;
+            btnContainer.innerHTML = ''; // Clear existing buttons
 
-            document.getElementById('ai-mode-full').onclick = () => {
+            // Create "Full" button
+            const fullBtn = document.createElement('button');
+            fullBtn.id = 'ai-mode-full';
+            fullBtn.className = 'ai-btn';
+            fullBtn.textContent = t('btn_mode_full');
+            fullBtn.onclick = () => {
                 exportMode = 'full';
                 resolve('full');
             };
 
-            document.getElementById('ai-mode-text').onclick = () => {
+            // Create "Text" button
+            const textBtn = document.createElement('button');
+            textBtn.id = 'ai-mode-text';
+            textBtn.className = 'ai-btn ai-btn-secondary';
+            textBtn.textContent = t('btn_mode_text');
+            textBtn.onclick = () => {
                 exportMode = 'text';
                 resolve('text');
             };
 
-            document.getElementById('ai-mode-close').onclick = () => {
+            // Create "Close" button
+            const closeModeBtn = document.createElement('button');
+            closeModeBtn.id = 'ai-mode-close';
+            closeModeBtn.className = 'ai-btn ai-btn-secondary';
+            closeModeBtn.textContent = t('btn_close');
+            closeModeBtn.onclick = () => {
                 overlay.style.display = 'none';
                 reject(new Error('Export cancelled by user.'));
             };
+
+            // Append all buttons
+            btnContainer.appendChild(fullBtn);
+            btnContainer.appendChild(textBtn);
+            btnContainer.appendChild(closeModeBtn);
         });
     }
 
@@ -638,7 +654,7 @@
         });
     }
 
-    function htmlToMarkdown(node) {
+    function htmlToMarkdown(node, listContext = null) {
         if (node.nodeType === Node.TEXT_NODE) {
             return node.textContent;
         }
@@ -672,33 +688,52 @@
         // Headings
         if (/^h[1-6]$/.test(tag)) {
             const level = parseInt(tag[1]);
-            return '\n' + '#'.repeat(level) + ' ' + getChildrenText(node) + '\n';
+            return '\n' + '#'.repeat(level) + ' ' + getChildrenText(node, listContext) + '\n';
         }
 
         // Bold
         if (tag === 'strong' || tag === 'b') {
-            return `**${getChildrenText(node)}**`;
+            return `**${getChildrenText(node, listContext)}**`;
         }
 
         // Italic
         if (tag === 'em' || tag === 'i') {
-            return `*${getChildrenText(node)}*`;
+            return `*${getChildrenText(node, listContext)}*`;
         }
 
         // Links
         if (tag === 'a') {
             const href = node.getAttribute('href') || '';
-            const text = getChildrenText(node);
+            const text = getChildrenText(node, listContext);
             return `[${text}](${href})`;
         }
 
-        // Lists
+        // Lists - pass context to children
         if (tag === 'ul' || tag === 'ol') {
-            return '\n' + getChildrenText(node) + '\n';
+            const listType = tag; // 'ul' or 'ol'
+            let index = 0;
+            let result = '\n';
+
+            for (const child of node.childNodes) {
+                if (child.nodeType === Node.ELEMENT_NODE && child.tagName.toLowerCase() === 'li') {
+                    index++;
+                    result += htmlToMarkdown(child, { type: listType, index: index });
+                } else {
+                    result += htmlToMarkdown(child, { type: listType, index: index });
+                }
+            }
+
+            return result + '\n';
         }
 
+        // List items - use context to determine format
         if (tag === 'li') {
-            return '- ' + getChildrenText(node) + '\n';
+            const content = getChildrenText(node, listContext);
+            if (listContext && listContext.type === 'ol') {
+                return `${listContext.index}. ${content}\n`;
+            } else {
+                return `- ${content}\n`;
+            }
         }
 
         // Line breaks
@@ -706,49 +741,48 @@
             return '\n';
         }
 
+        // Blockquotes - prefix each line with >
+        if (tag === 'blockquote') {
+            const content = getChildrenText(node, listContext);
+            // Split by lines and prefix each with "> "
+            return '\n' + content.split('\n')
+                .filter(line => line.trim().length > 0)
+                .map(line => `> ${line}`)
+                .join('\n') + '\n';
+        }
+
         // Block elements
-        if (['div', 'p', 'blockquote'].includes(tag)) {
-            return getChildrenText(node) + '\n';
+        if (['div', 'p'].includes(tag)) {
+            return getChildrenText(node, listContext) + '\n';
         }
 
-        return getChildrenText(node);
+        return getChildrenText(node, listContext);
     }
 
-    function getChildrenText(node) {
-        return Array.from(node.childNodes).map(child => htmlToMarkdown(child)).join('');
+    function getChildrenText(node, listContext = null) {
+        return Array.from(node.childNodes).map(child => htmlToMarkdown(child, listContext)).join('');
     }
 
-    async function downloadCollectedData() {
-        if (collectedData.size === 0) return false;
+    // Helper: Download text-only mode
+    function downloadTextOnly() {
+        let content = `# ${t('file_header')}\n\n`;
+        content += `**${t('file_time')}:** ${new Date().toLocaleString()}\n\n`;
+        content += `**${t('file_count')}:** ${collectedData.size}\n\n`;
+        content += "---\n\n";
 
-        // 纯文本模式
-        if (exportMode === 'text') {
-            let content = `# ${t('file_header')}\n\n`;
-            content += `**${t('file_time')}:** ${new Date().toLocaleString()}\n\n`;
-            content += `**${t('file_count')}:** ${collectedData.size}\n\n`;
-            content += "---\n\n";
-
-            for (const [id, item] of collectedData) {
-                const roleName = item.role === 'Gemini' ? t('role_gemini') : t('role_user');
-                content += `## ${roleName}\n\n${item.text}\n\n`;
-                content += `---\n\n`;
-            }
-
-            const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
-            downloadBlob(blob, `Gemini_Chat_v14_${Date.now()}.md`);
-            return true;
+        for (const [id, item] of collectedData) {
+            const roleName = item.role === 'Gemini' ? t('role_gemini') : t('role_user');
+            content += `## ${roleName}\n\n${item.text}\n\n`;
+            content += `---\n\n`;
         }
 
-        // 完整模式（包含附件）
-        const zip = new JSZip();
-        const imgFolder = zip.folder("images");
-        const fileFolder = zip.folder("files");
+        const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+        downloadBlob(blob, `Gemini_Chat_v14_${Date.now()}.md`);
+    }
+
+    // Helper: Process and download images
+    async function processImages(allText, imgFolder) {
         const imgMap = new Map();
-        const fileMap = new Map();
-
-        const allText = Array.from(collectedData.values()).map(v => v.text).join('\n');
-
-        // 1. 处理图片（并行下载）
         const imgRegex = /!\[.*?\]\((.*?)\)/g;
         const imgMatches = [...allText.matchAll(imgRegex)];
         const uniqueImgUrls = new Set(imgMatches.map(m => m[1]));
@@ -776,13 +810,22 @@
             await Promise.all(imagePromises);
         }
 
-        // 2. 处理通用文件（并行下载）
-        const linkRegex = /(?<!!)\[.*?\]\((.*?)\)/g;
+        return imgMap;
+    }
+
+    // Helper: Process and download files
+    async function processFiles(allText, fileFolder) {
+        const fileMap = new Map();
+        const linkRegex = /\[.*?\]\((.*?)\)/g;
         const linkMatches = [...allText.matchAll(linkRegex)];
         const uniqueFileUrls = new Set();
         const downloadableExtensions = ['.pdf', '.csv', '.txt', '.json', '.py', '.js', '.html', '.css', '.md', '.zip', '.tar', '.gz'];
 
         for (const match of linkMatches) {
+            // Skip image links (those starting with !)
+            if (match[0].startsWith('!')) {
+                continue;
+            }
             const url = match[1];
             const lowerUrl = url.toLowerCase();
             const isBlob = lowerUrl.startsWith('blob:');
@@ -826,7 +869,14 @@
             await Promise.all(filePromises);
         }
 
-        // 3. 生成 Markdown
+        return fileMap;
+    }
+
+    // Helper: Generate Markdown content with URL replacements
+    function generateMarkdownContent(imgMap, fileMap) {
+        const imgRegex = /!\[.*?\]\((.*?)\)/g;
+        const linkRegex = /\[.*?\]\((.*?)\)/g;
+
         let content = `# ${t('file_header')}\n\n`;
         content += `**${t('file_time')}:** ${new Date().toLocaleString()}\n\n`;
         content += `**${t('file_count')}:** ${collectedData.size}\n\n`;
@@ -836,6 +886,7 @@
             const roleName = item.role === 'Gemini' ? t('role_gemini') : t('role_user');
             let processedText = item.text;
 
+            // Replace image URLs
             processedText = processedText.replace(imgRegex, (match, url) => {
                 if (imgMap.has(url)) {
                     return match.slice(0, -1 - url.length) + imgMap.get(url) + ')';
@@ -843,7 +894,12 @@
                 return match;
             });
 
+            // Replace file URLs (skip image links)
             processedText = processedText.replace(linkRegex, (match, url) => {
+                // Skip image links
+                if (match.startsWith('!')) {
+                    return match;
+                }
                 if (fileMap.has(url)) {
                     return match.slice(0, -1 - url.length) + fileMap.get(url) + ')';
                 }
@@ -854,6 +910,34 @@
             content += `---\n\n`;
         }
 
+        return content;
+    }
+
+    // Main function: orchestrate the download process
+    async function downloadCollectedData() {
+        if (collectedData.size === 0) return false;
+
+        // Text-only mode
+        if (exportMode === 'text') {
+            downloadTextOnly();
+            return true;
+        }
+
+        // Full mode with attachments
+        const zip = new JSZip();
+        const imgFolder = zip.folder("images");
+        const fileFolder = zip.folder("files");
+
+        const allText = Array.from(collectedData.values()).map(v => v.text).join('\n');
+
+        // Process images and files in parallel
+        const imgMap = await processImages(allText, imgFolder);
+        const fileMap = await processFiles(allText, fileFolder);
+
+        // Generate final Markdown content
+        const content = generateMarkdownContent(imgMap, fileMap);
+
+        // Create and download ZIP
         zip.file("chat_history.md", content);
         const zipBlob = await zip.generateAsync({ type: "blob" });
         downloadBlob(zipBlob, `Gemini_Chat_v14_${Date.now()}.zip`);
