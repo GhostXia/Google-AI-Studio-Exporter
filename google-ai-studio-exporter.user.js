@@ -423,9 +423,9 @@
             const btnContainer = overlay.querySelector('.ai-btn-container');
             btnContainer.style.display = 'flex';
             btnContainer.innerHTML = `
-                <button id="ai-mode-full" class="ai-btn">${t('btn_mode_full')}</button>
-                <button id="ai-mode-text" class="ai-btn ai-btn-secondary">${t('btn_mode_text')}</button>
-                <button id="ai-mode-close" class="ai-btn ai-btn-secondary">${t('btn_close')}</button>
+                <button id="ai-mode-full" class="ai-btn" style="display: inline-block">${t('btn_mode_full')}</button>
+                <button id="ai-mode-text" class="ai-btn ai-btn-secondary" style="display: inline-block">${t('btn_mode_text')}</button>
+                <button id="ai-mode-close" class="ai-btn ai-btn-secondary" style="display: inline-block">${t('btn_close')}</button>
             `;
 
             document.getElementById('ai-mode-full').onclick = () => {
