@@ -13,7 +13,6 @@
 // @supportURL   https://github.com/GhostXia/Google-AI-Studio-Exporter/issues
 // @downloadURL  https://github.com/GhostXia/Google-AI-Studio-Exporter/raw/main/google-ai-studio-exporter.user.js
 // @updateURL    https://github.com/GhostXia/Google-AI-Studio-Exporter/raw/main/google-ai-studio-exporter.user.js
-// @grant        none
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js
 // @grant        GM_xmlhttpRequest
 // ==/UserScript==
