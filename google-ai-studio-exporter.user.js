@@ -935,8 +935,10 @@
         const allText = Array.from(collectedData.values()).map(v => v.text).join('\n');
 
         // Process images and files in parallel
-        const imgMap = await processImages(allText, imgFolder);
-        const fileMap = await processFiles(allText, fileFolder);
+        const [imgMap, fileMap] = await Promise.all([
+            processImages(allText, imgFolder),
+            processFiles(allText, fileFolder)
+        ]);
 
         // Generate final Markdown content
         const content = generateMarkdownContent(imgMap, fileMap);
