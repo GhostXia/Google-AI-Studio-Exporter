@@ -757,7 +757,7 @@
 
         // Block elements
         if (['div', 'p'].includes(tag)) {
-            return getChildrenText(node, listContext) + '\n';
+            return '\n' + getChildrenText(node, listContext) + '\n';
         }
 
         return getChildrenText(node, listContext);
