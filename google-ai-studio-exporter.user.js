@@ -2,7 +2,7 @@
 // @name         Google AI Studio Exporter
 // @name:zh-CN   Google AI Studio 对话导出器
 // @namespace    https://github.com/GhostXia/Google-AI-Studio-Exporter
-// @version      1.3.0
+// @version      1.3.4
 // @description  Export your Gemini chat history from Google AI Studio to a text file. Features: Auto-scrolling, User/Model role differentiation, clean output, and full mobile optimization.
 // @description:zh-CN 完美导出 Google AI Studio 对话记录。具备自动滚动加载、精准去重、防抖动、User/Model角色区分，以及全平台响应式优化。支持 PC、平板、手机全平台。
 // @author       GhostXia
@@ -43,6 +43,7 @@
             'role_user': 'User',
             'role_gemini': 'Gemini',
             'err_no_scroller': '未找到滚动容器。请尝试刷新页面或手动滚动一下再试。',
+            'err_no_data': '未采集到任何对话数据。请检查页面是否有对话内容。',
             'err_runtime': '运行错误: '
         },
         'en': {
@@ -64,6 +65,7 @@
             'role_user': 'User',
             'role_gemini': 'Gemini',
             'err_no_scroller': 'Scroll container not found. Try refreshing or scrolling manually.',
+            'err_no_data': 'No conversation data was collected. Please check if the page has any chat content.',
             'err_runtime': 'Runtime Error: '
         }
     };
@@ -364,17 +366,8 @@
 
         closeBtn.onclick = () => { overlay.style.display = 'none'; };
         saveBtn.onclick = () => {
-            // 重新下载文件
-            if (collectedData.size > 0) {
-                let content = t('file_header') + "\n";
-                content += `${t('file_time')}: ${new Date().toLocaleString()}\n`;
-                content += `${t('file_count')}: ${collectedData.size}\n`;
-                content += "========================================\n\n";
-                for (const [id, item] of collectedData) {
-                    content += `### ${item.role === 'Gemini' ? t('role_gemini') : t('role_user')}:\n${item.text}\n`;
-                    content += `----------------------------------------------------------------\n\n`;
-                }
-                download(content, `Gemini_Chat_v14_${Date.now()}.txt`);
+            if (!downloadCollectedData()) {
+                updateUI('ERROR', t('err_no_data'));
             }
         };
     }
@@ -567,12 +560,8 @@
     // 5. 辅助功能
     // ==========================================
 
-    function endProcess(status, msg) {
-        if (hasFinished) return;
-        hasFinished = true;
-        isRunning = false;
-
-        if (status === "FINISHED") {
+    function downloadCollectedData() {
+        if (collectedData.size > 0) {
             let content = t('file_header') + "\n";
             content += `${t('file_time')}: ${new Date().toLocaleString()}\n`;
             content += `${t('file_count')}: ${collectedData.size}\n`;
@@ -583,7 +572,22 @@
                 content += `----------------------------------------------------------------\n\n`;
             }
             download(content, `Gemini_Chat_v14_${Date.now()}.txt`);
-            updateUI('FINISHED', collectedData.size);
+            return true;
+        }
+        return false;
+    }
+
+    function endProcess(status, msg) {
+        if (hasFinished) return;
+        hasFinished = true;
+        isRunning = false;
+
+        if (status === "FINISHED") {
+            if (downloadCollectedData()) {
+                updateUI('FINISHED', collectedData.size);
+            } else {
+                updateUI('ERROR', t('err_no_data'));
+            }
         } else {
             updateUI('ERROR', msg);
         }
