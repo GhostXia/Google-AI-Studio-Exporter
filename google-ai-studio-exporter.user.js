@@ -367,7 +367,7 @@
         closeBtn.onclick = () => { overlay.style.display = 'none'; };
         saveBtn.onclick = () => {
             if (!downloadCollectedData()) {
-                alert(t('err_no_data'));
+                updateUI('ERROR', t('err_no_data'));
             }
         };
     }
