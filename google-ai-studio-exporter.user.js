@@ -393,7 +393,7 @@
         closeBtn.onclick = () => { overlay.style.display = 'none'; };
         saveBtn.onclick = async () => {
             if (cachedZipBlob) {
-                downloadBlob(cachedZipBlob, `Gemini_Chat_v14_${Date.now()}.zip`);
+                downloadBlob(cachedZipBlob, `Gemini_Chat_v14_${Date.now()}.${exportMode === 'full' ? 'zip' : 'md'}`);
                 return;
             }
             try {
