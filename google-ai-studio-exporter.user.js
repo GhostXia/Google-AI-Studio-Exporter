@@ -732,7 +732,7 @@
 
         // List items - use context to determine format
         if (tag === 'li') {
-            const content = getChildrenText(node, listContext);
+            const content = getChildrenText(node, listContext).trim();
             if (listContext && listContext.type === 'ol') {
                 return `${listContext.index}. ${content}\n`;
             } else {
