@@ -750,7 +750,6 @@
             const content = getChildrenText(node, listContext);
             // Split by lines and prefix each with "> "
             return '\n' + content.split('\n')
-                .filter(line => line.trim().length > 0)
                 .map(line => `> ${line}`)
                 .join('\n') + '\n';
         }
