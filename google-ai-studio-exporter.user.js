@@ -428,40 +428,30 @@
             btnContainer.style.display = 'flex';
             btnContainer.innerHTML = ''; // Clear existing buttons
 
-            // Create "Full" button
-            const fullBtn = document.createElement('button');
-            fullBtn.id = 'ai-mode-full';
-            fullBtn.className = 'ai-btn';
-            fullBtn.textContent = t('btn_mode_full');
-            fullBtn.onclick = () => {
+            // Helper to create buttons
+            const createModeButton = (id, text, isPrimary, onClick) => {
+                const btn = document.createElement('button');
+                btn.id = id;
+                btn.className = isPrimary ? 'ai-btn' : 'ai-btn ai-btn-secondary';
+                btn.textContent = text;
+                btn.onclick = onClick;
+                btnContainer.appendChild(btn);
+            };
+
+            createModeButton('ai-mode-full', t('btn_mode_full'), true, () => {
                 exportMode = 'full';
                 resolve('full');
-            };
+            });
 
-            // Create "Text" button
-            const textBtn = document.createElement('button');
-            textBtn.id = 'ai-mode-text';
-            textBtn.className = 'ai-btn ai-btn-secondary';
-            textBtn.textContent = t('btn_mode_text');
-            textBtn.onclick = () => {
+            createModeButton('ai-mode-text', t('btn_mode_text'), false, () => {
                 exportMode = 'text';
                 resolve('text');
-            };
+            });
 
-            // Create "Close" button
-            const closeModeBtn = document.createElement('button');
-            closeModeBtn.id = 'ai-mode-close';
-            closeModeBtn.className = 'ai-btn ai-btn-secondary';
-            closeModeBtn.textContent = t('btn_close');
-            closeModeBtn.onclick = () => {
+            createModeButton('ai-mode-close', t('btn_close'), false, () => {
                 overlay.style.display = 'none';
                 reject(new Error('Export cancelled by user.'));
-            };
-
-            // Append all buttons
-            btnContainer.appendChild(fullBtn);
-            btnContainer.appendChild(textBtn);
-            btnContainer.appendChild(closeModeBtn);
+            });
         });
     }
 
@@ -786,9 +776,10 @@
     // Helper: Process and download images
     async function processImages(allText, imgFolder) {
         const imgMap = new Map();
-        const imgRegex = /!\[.*?\]\((.*?)\)/g;
+        // More robust regex: captures URL before optional title
+        const imgRegex = /!\[([^\]]*)\]\(([^\s)]+)(?:\s+"[^"]*")?\)/g;
         const imgMatches = [...allText.matchAll(imgRegex)];
-        const uniqueImgUrls = new Set(imgMatches.map(m => m[1]));
+        const uniqueImgUrls = new Set(imgMatches.map(m => m[2])); // URL is in group 2
 
         if (uniqueImgUrls.size > 0) {
             updateUI('SCROLLING', `正在打包 ${uniqueImgUrls.size} 张图片...`);
@@ -819,7 +810,8 @@
     // Helper: Process and download files
     async function processFiles(allText, fileFolder) {
         const fileMap = new Map();
-        const linkRegex = /\[.*?\]\((.*?)\)/g;
+        // More robust regex: captures URL before optional title
+        const linkRegex = /\[([^\]]*)\]\(([^\s)]+)(?:\s+"[^"]*")?\)/g;
         const linkMatches = [...allText.matchAll(linkRegex)];
         const uniqueFileUrls = new Set();
         const downloadableExtensions = ['.pdf', '.csv', '.txt', '.json', '.py', '.js', '.html', '.css', '.md', '.zip', '.tar', '.gz'];
@@ -829,7 +821,7 @@
             if (match[0].startsWith('!')) {
                 continue;
             }
-            const url = match[1];
+            const url = match[2]; // URL is now in group 2
             const lowerUrl = url.toLowerCase();
             const isBlob = lowerUrl.startsWith('blob:');
             const isGoogleStorage = lowerUrl.includes('googlestorage') || lowerUrl.includes('googleusercontent');
@@ -883,8 +875,9 @@
 
     // Helper: Generate Markdown content with URL replacements
     function generateMarkdownContent(imgMap, fileMap) {
-        const imgRegex = /(!\[[^\]]*\]\()([^)\s]+)([^\)]*\))/g;
-        const linkRegex = /(\[[^\]]*\]\()([^)\s]+)([^\)]*\))/g;
+        // Capture: 1=Alt/Text, 2=URL, 3=Title(optional)
+        const imgRegex = /!\[([^\]]*)\]\(([^\s)]+)(\s+"[^"]*")?\)/g;
+        const linkRegex = /\[([^\]]*)\]\(([^\s)]+)(\s+"[^"]*")?\)/g;
 
         let content = `# ${t('file_header')}\n\n`;
         content += `**${t('file_time')}:** ${new Date().toLocaleString()}\n\n`;
@@ -896,21 +889,23 @@
             let processedText = item.text;
 
             // Replace image URLs
-            processedText = processedText.replace(imgRegex, (match, prefix, url, suffix) => {
+            processedText = processedText.replace(imgRegex, (match, alt, url, title) => {
                 if (imgMap.has(url)) {
-                    return prefix + imgMap.get(url) + suffix;
+                    const titleStr = title || '';
+                    return `![${alt}](${imgMap.get(url)}${titleStr})`;
                 }
                 return match;
             });
 
             // Replace file URLs
-            processedText = processedText.replace(linkRegex, (match, prefix, url, suffix) => {
-                // Skip image links, which are also matched by linkRegex
+            processedText = processedText.replace(linkRegex, (match, text, url, title) => {
+                // Skip image links
                 if (match.startsWith('!')) {
                     return match;
                 }
                 if (fileMap.has(url)) {
-                    return prefix + fileMap.get(url) + suffix;
+                    const titleStr = title || '';
+                    return `[${text}](${fileMap.get(url)}${titleStr})`;
                 }
                 return match;
             });
