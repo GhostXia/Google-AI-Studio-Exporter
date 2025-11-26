@@ -87,9 +87,16 @@
         }
     };
 
-    function t(key, param) {
+    function t(key, params = {}) {
         let str = translations[lang][key] || key;
-        if (param !== undefined) str = str.replace('{s}', param);
+        // Legacy support for single parameter
+        if (typeof params !== 'object' || params === null) {
+            str = str.replace('{s}', params);
+            return str;
+        }
+        for (const pKey in params) {
+            str = str.replace(new RegExp(`\\{${pKey}\\}`, 'g'), params[pKey]);
+        }
         return str;
     }
 
@@ -794,7 +801,7 @@
         const uniqueImgUrls = new Set(imgMatches.map(m => m[2])); // URL is in group 2
 
         if (uniqueImgUrls.size > 0) {
-            updateUI('SCROLLING', t('status_packaging_images').replace('{n}', uniqueImgUrls.size));
+            updateUI('SCROLLING', t('status_packaging_images', { n: uniqueImgUrls.size }));
             let completedCount = 0;
 
             const imagePromises = Array.from(uniqueImgUrls).map(async (url, index) => {
@@ -810,7 +817,9 @@
                     console.error("图片下载失败:", url, e);
                 }
                 completedCount++;
-                updateUI('SCROLLING', t('status_packaging_images_progress').replace('{c}', completedCount).replace('{t}', uniqueImgUrls.size));
+                if (completedCount % 5 === 0 || completedCount === uniqueImgUrls.size) {
+                    updateUI('SCROLLING', t('status_packaging_images_progress', { c: completedCount, t: uniqueImgUrls.size }));
+                }
             });
 
             await Promise.all(imagePromises);
@@ -844,7 +853,7 @@
         }
 
         if (uniqueFileUrls.size > 0) {
-            updateUI('SCROLLING', t('status_packaging_files').replace('{n}', uniqueFileUrls.size));
+            updateUI('SCROLLING', t('status_packaging_files', { n: uniqueFileUrls.size }));
             let completedCount = 0;
 
             const filePromises = Array.from(uniqueFileUrls).map(async (url, index) => {
@@ -863,7 +872,8 @@
                     } catch (e) {
                         console.warn(`Could not decode filename: ${filename}`, e);
                     }
-                    if (!decodedFilename || decodedFilename.length > 50) decodedFilename = `file_${index}`;
+                    // Increased limit from 50 to 100 as per PR review
+                    if (!decodedFilename || decodedFilename.length > 100) decodedFilename = `file_${index}`;
                     const finalName = `${index}_${decodedFilename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
 
                     const blob = await fetchResource(url);
@@ -875,7 +885,9 @@
                     console.error("文件下载失败:", url, e);
                 }
                 completedCount++;
-                updateUI('SCROLLING', t('status_packaging_files_progress').replace('{c}', completedCount).replace('{t}', uniqueFileUrls.size));
+                if (completedCount % 5 === 0 || completedCount === uniqueFileUrls.size) {
+                    updateUI('SCROLLING', t('status_packaging_files_progress', { c: completedCount, t: uniqueFileUrls.size }));
+                }
             });
 
             await Promise.all(filePromises);
