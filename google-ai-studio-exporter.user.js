@@ -613,6 +613,111 @@
     // 5. 辅助功能
     // ==========================================
 
+    function findRealScroller() {
+        const candidates = document.querySelectorAll('[role="main"], .conversation-container, ms-chat-container');
+        for (const el of candidates) {
+            if (el.scrollHeight > el.clientHeight) return el;
+        }
+        return document.scrollingElement || document.documentElement;
+    }
+
+    function captureData() {
+        const turns = document.querySelectorAll('ms-chat-turn');
+        turns.forEach(turn => {
+            if (!turn.id || collectedData.has(turn.id)) return;
+
+            const role = (turn.querySelector('[data-turn-role="Model"]') || turn.innerHTML.includes('model-prompt-container')) ? "Gemini" : "User";
+
+            const clone = turn.cloneNode(true);
+            const trash = ['.actions-container', '.turn-footer', 'button', 'mat-icon', 'ms-grounding-sources', 'ms-search-entry-point'];
+            trash.forEach(s => clone.querySelectorAll(s).forEach(e => e.remove()));
+
+            let text = htmlToMarkdown(clone);
+
+            if (text.length > 0) collectedData.set(turn.id, { role, text });
+        });
+    }
+
+    function htmlToMarkdown(node) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            return node.textContent;
+        }
+
+        if (node.nodeType !== Node.ELEMENT_NODE) return '';
+
+        const tag = node.tagName.toLowerCase();
+
+        // Images
+        if (tag === 'img') {
+            const alt = node.getAttribute('alt') || '';
+            const src = node.getAttribute('src') || '';
+            return `![${alt}](${src})`;
+        }
+
+        // Code blocks
+        if (tag === 'pre') {
+            const codeEl = node.querySelector('code');
+            if (codeEl) {
+                const language = Array.from(codeEl.classList).find(c => c.startsWith('language-'))?.replace('language-', '') || '';
+                const code = codeEl.textContent;
+                return `\n\`\`\`${language}\n${code}\n\`\`\`\n`;
+            }
+        }
+
+        // Inline code
+        if (tag === 'code') {
+            return `\`${node.textContent}\``;
+        }
+
+        // Headings
+        if (/^h[1-6]$/.test(tag)) {
+            const level = parseInt(tag[1]);
+            return '\n' + '#'.repeat(level) + ' ' + getChildrenText(node) + '\n';
+        }
+
+        // Bold
+        if (tag === 'strong' || tag === 'b') {
+            return `**${getChildrenText(node)}**`;
+        }
+
+        // Italic
+        if (tag === 'em' || tag === 'i') {
+            return `*${getChildrenText(node)}*`;
+        }
+
+        // Links
+        if (tag === 'a') {
+            const href = node.getAttribute('href') || '';
+            const text = getChildrenText(node);
+            return `[${text}](${href})`;
+        }
+
+        // Lists
+        if (tag === 'ul' || tag === 'ol') {
+            return '\n' + getChildrenText(node) + '\n';
+        }
+
+        if (tag === 'li') {
+            return '- ' + getChildrenText(node) + '\n';
+        }
+
+        // Line breaks
+        if (tag === 'br') {
+            return '\n';
+        }
+
+        // Block elements
+        if (['div', 'p', 'blockquote'].includes(tag)) {
+            return getChildrenText(node) + '\n';
+        }
+
+        return getChildrenText(node);
+    }
+
+    function getChildrenText(node) {
+        return Array.from(node.childNodes).map(child => htmlToMarkdown(child)).join('');
+    }
+
     async function downloadCollectedData() {
         if (collectedData.size === 0) return false;
 
@@ -643,8 +748,88 @@
 
         const allText = Array.from(collectedData.values()).map(v => v.text).join('\n');
 
-        // 1. 处理图片
+        // 1. 处理图片（并行下载）
         const imgRegex = /!\[.*?\]\((.*?)\)/g;
+        const imgMatches = [...allText.matchAll(imgRegex)];
+        const uniqueImgUrls = new Set(imgMatches.map(m => m[1]));
+
+        if (uniqueImgUrls.size > 0) {
+            updateUI('SCROLLING', `正在打包 ${uniqueImgUrls.size} 张图片...`);
+            let completedCount = 0;
+
+            const imagePromises = Array.from(uniqueImgUrls).map(async (url, index) => {
+                try {
+                    const blob = await fetchResource(url);
+                    if (blob) {
+                        const extension = (blob.type.split('/')[1] || 'png').split('+')[0];
+                        const finalName = `image_${index}.${extension}`;
+                        imgFolder.file(finalName, blob);
+                        imgMap.set(url, `images/${finalName}`);
+                    }
+                } catch (e) {
+                    console.error("图片下载失败:", url, e);
+                }
+                completedCount++;
+                updateUI('SCROLLING', `打包图片: ${completedCount}/${uniqueImgUrls.size}`);
+            });
+
+            await Promise.all(imagePromises);
+        }
+
+        // 2. 处理通用文件（并行下载）
+        const linkRegex = /(?<!!)\[.*?\]\((.*?)\)/g;
+        const linkMatches = [...allText.matchAll(linkRegex)];
+        const uniqueFileUrls = new Set();
+        const downloadableExtensions = ['.pdf', '.csv', '.txt', '.json', '.py', '.js', '.html', '.css', '.md', '.zip', '.tar', '.gz'];
+
+        for (const match of linkMatches) {
+            const url = match[1];
+            const lowerUrl = url.toLowerCase();
+            const isBlob = lowerUrl.startsWith('blob:');
+            const isGoogleStorage = lowerUrl.includes('googlestorage') || lowerUrl.includes('googleusercontent');
+            const hasExt = downloadableExtensions.some(ext => lowerUrl.split('?')[0].endsWith(ext));
+
+            if (isBlob || isGoogleStorage || hasExt) {
+                uniqueFileUrls.add(url);
+            }
+        }
+
+        if (uniqueFileUrls.size > 0) {
+            updateUI('SCROLLING', `正在打包 ${uniqueFileUrls.size} 个文件...`);
+            let completedCount = 0;
+
+            const filePromises = Array.from(uniqueFileUrls).map(async (url, index) => {
+                try {
+                    let filename = "file";
+                    try {
+                        const urlObj = new URL(url);
+                        filename = urlObj.pathname.substring(urlObj.pathname.lastIndexOf('/') + 1);
+                    } catch (e) {
+                        filename = url.split('/').pop().split('?')[0];
+                    }
+
+                    if (!filename || filename.length > 50) filename = `file_${index}`;
+                    const finalName = `${index}_${decodeURIComponent(filename).replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+
+                    const blob = await fetchResource(url);
+                    if (blob) {
+                        fileFolder.file(finalName, blob);
+                        fileMap.set(url, `files/${finalName}`);
+                    }
+                } catch (e) {
+                    console.error("文件下载失败:", url, e);
+                }
+                completedCount++;
+                updateUI('SCROLLING', `打包文件: ${completedCount}/${uniqueFileUrls.size}`);
+            });
+
+            await Promise.all(filePromises);
+        }
+
+        // 3. 生成 Markdown
+        let content = `# ${t('file_header')}\n\n`;
+        content += `**${t('file_time')}:** ${new Date().toLocaleString()}\n\n`;
+        content += `**${t('file_count')}:** ${collectedData.size}\n\n`;
         content += "---\n\n";
 
         for (const [id, item] of collectedData) {
