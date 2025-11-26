@@ -801,7 +801,7 @@
         }
 
         const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
-        downloadBlob(blob, `Gemini_Chat_v14_${Date.now()}.md`);
+        downloadBlob(cachedZipBlob = blob, `Gemini_Chat_v14_${Date.now()}.md`);
     }
 
     // Generic Helper: Process resources (images or files)
