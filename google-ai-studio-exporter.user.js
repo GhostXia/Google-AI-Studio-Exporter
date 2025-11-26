@@ -884,7 +884,7 @@
     // Helper: Generate Markdown content with URL replacements
     function generateMarkdownContent(imgMap, fileMap) {
         const imgRegex = /(!\[[^\]]*\]\()([^)\s]+)([^\)]*\))/g;
-        const linkRegex = /\[.*?\]\((.*?)\)/g;
+        const linkRegex = /(\[[^\]]*\]\()([^)\s]+)([^\)]*\))/g;
 
         let content = `# ${t('file_header')}\n\n`;
         content += `**${t('file_time')}:** ${new Date().toLocaleString()}\n\n`;
