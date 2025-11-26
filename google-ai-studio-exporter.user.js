@@ -379,7 +379,7 @@
         saveBtn.onclick = async () => {
             const result = await downloadCollectedData();
             if (!result) {
-                alert(t('err_no_data'));
+                updateUI('ERROR', t('err_no_data'));
             }
         };
     }
@@ -414,7 +414,7 @@
     }
 
     function showModeSelection() {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             initUI();
             titleEl.innerText = t('title_mode_select');
             statusEl.innerHTML = t('status_mode_select');
@@ -425,6 +425,7 @@
             btnContainer.innerHTML = `
                 <button id="ai-mode-full" class="ai-btn">${t('btn_mode_full')}</button>
                 <button id="ai-mode-text" class="ai-btn ai-btn-secondary">${t('btn_mode_text')}</button>
+                <button id="ai-mode-close" class="ai-btn ai-btn-secondary">${t('btn_close')}</button>
             `;
 
             document.getElementById('ai-mode-full').onclick = () => {
@@ -435,6 +436,11 @@
             document.getElementById('ai-mode-text').onclick = () => {
                 exportMode = 'text';
                 resolve('text');
+            };
+
+            document.getElementById('ai-mode-close').onclick = () => {
+                overlay.style.display = 'none';
+                reject(new Error('Export cancelled by user.'));
             };
         });
     }
@@ -449,7 +455,13 @@
         collectedData.clear();
 
         // 显示模式选择
-        await showModeSelection();
+        try {
+            await showModeSelection();
+        } catch (e) {
+            console.log('Export cancelled.');
+            isRunning = false;
+            return;
+        }
 
         for (let i = 3; i > 0; i--) {
             updateUI('COUNTDOWN', i);
@@ -633,81 +645,6 @@
 
         // 1. 处理图片
         const imgRegex = /!\[.*?\]\((.*?)\)/g;
-        const imgMatches = [...allText.matchAll(imgRegex)];
-        const uniqueImgUrls = new Set(imgMatches.map(m => m[1]));
-
-        if (uniqueImgUrls.size > 0) {
-            updateUI('SCROLLING', `正在打包 ${uniqueImgUrls.size} 张图片...`);
-            let count = 0;
-            for (const url of uniqueImgUrls) {
-                try {
-                    const blob = await fetchResource(url);
-                    if (blob) {
-                        // Get extension from MIME type, default to 'png'
-                        const extension = (blob.type.split('/')[1] || 'png').split('+')[0];
-                        const finalName = `image_${count}.${extension}`;
-                        imgFolder.file(finalName, blob);
-                        imgMap.set(url, `images/${finalName}`);
-                    }
-                    count++;
-                    updateUI('SCROLLING', `打包图片: ${count}/${uniqueImgUrls.size}`);
-                } catch (e) {
-                    console.error("图片下载失败:", url, e);
-                }
-            }
-        }
-
-        // 2. 处理通用文件
-        const linkRegex = /(?<!!)\[.*?\]\((.*?)\)/g;
-        const linkMatches = [...allText.matchAll(linkRegex)];
-        const uniqueFileUrls = new Set();
-        const downloadableExtensions = ['.pdf', '.csv', '.txt', '.json', '.py', '.js', '.html', '.css', '.md', '.zip', '.tar', '.gz'];
-
-        for (const match of linkMatches) {
-            const url = match[1];
-            const lowerUrl = url.toLowerCase();
-            const isBlob = lowerUrl.startsWith('blob:');
-            const isGoogleStorage = lowerUrl.includes('googlestorage') || lowerUrl.includes('googleusercontent');
-            const hasExt = downloadableExtensions.some(ext => lowerUrl.split('?')[0].endsWith(ext));
-
-            if (isBlob || isGoogleStorage || hasExt) {
-                uniqueFileUrls.add(url);
-            }
-        }
-
-        if (uniqueFileUrls.size > 0) {
-            updateUI('SCROLLING', `正在打包 ${uniqueFileUrls.size} 个文件...`);
-            let count = 0;
-            for (const url of uniqueFileUrls) {
-                try {
-                    let filename = "file";
-                    try {
-                        const urlObj = new URL(url);
-                        filename = urlObj.pathname.substring(urlObj.pathname.lastIndexOf('/') + 1);
-                    } catch (e) {
-                        filename = url.split('/').pop().split('?')[0];
-                    }
-
-                    if (!filename || filename.length > 50) filename = `file_${count}`;
-                    const finalName = `${count}_${decodeURIComponent(filename).replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-
-                    const blob = await fetchResource(url);
-                    if (blob) {
-                        fileFolder.file(finalName, blob);
-                        fileMap.set(url, `files/${finalName}`);
-                    }
-                    count++;
-                    updateUI('SCROLLING', `打包文件: ${count}/${uniqueFileUrls.size}`);
-                } catch (e) {
-                    console.error("文件下载失败:", url, e);
-                }
-            }
-        }
-
-        // 3. 生成 Markdown
-        let content = `# ${t('file_header')}\n\n`;
-        content += `**${t('file_time')}:** ${new Date().toLocaleString()}\n\n`;
-        content += `**${t('file_count')}:** ${collectedData.size}\n\n`;
         content += "---\n\n";
 
         for (const [id, item] of collectedData) {
