@@ -763,7 +763,7 @@
 
         // Line breaks
         if (tag === 'br') {
-            return '\n';
+            return '  \n';
         }
 
         // Blockquotes - prefix each line with >
