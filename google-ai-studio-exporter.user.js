@@ -178,7 +178,6 @@
             cursor: pointer; 
             font-size: 16px; 
             font-weight: 600;
-            font-weight: 600;
             display: inline-block;
             box-shadow: 0 4px 12px rgba(26, 115, 232, 0.3);
             transition: all 0.2s ease;
@@ -825,7 +824,8 @@
         }
 
         const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
-        downloadBlob(cachedZipBlob = blob, `Gemini_Chat_v14_${Date.now()}.md`);
+        cachedZipBlob = blob;
+        downloadBlob(blob, `Gemini_Chat_v14_${Date.now()}.md`);
     }
 
     // Generic Helper: Process resources (images or files)
