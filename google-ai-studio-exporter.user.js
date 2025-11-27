@@ -425,6 +425,8 @@
             countEl.innerText = msg;
         } else if (state === 'PACKAGING') {
             titleEl.innerText = t('title_scrolling');
+            // In PACKAGING state, the status message (msg) already contains the count (e.g., "Packaging 5 images...").
+            // So we display the full message in statusEl and hide the separate countEl to avoid duplication.
             statusEl.innerHTML = msg;
             countEl.style.display = 'none';
         } else if (state === 'FINISHED') {
@@ -747,9 +749,11 @@
             for (const child of node.childNodes) {
                 if (child.nodeType === Node.ELEMENT_NODE && child.tagName.toLowerCase() === 'li') {
                     index++;
-                    result += htmlToMarkdown(child, { type: listType, index: index }, indent);
+                    // Pass indent + 1 to children
+                    result += htmlToMarkdown(child, { type: listType, index: index }, indent + 1);
                 } else {
-                    result += htmlToMarkdown(child, listContext, indent);
+                    // Pass indent + 1 to children even if not li (e.g. nested ul)
+                    result += htmlToMarkdown(child, listContext, indent + 1);
                 }
             }
 
@@ -758,8 +762,10 @@
 
         // List items - use context to determine format
         if (tag === 'li') {
-            const content = getChildrenText(node, listContext, indent + 1);
-            const indentStr = '  '.repeat(indent);
+            // Children of li are at the same indent level as the li itself (which is already indented by parent)
+            const content = getChildrenText(node, listContext, indent);
+            // Render bullet at indent - 1
+            const indentStr = '  '.repeat(Math.max(0, indent - 1));
             if (listContext && listContext.type === 'ol') {
                 return `${indentStr}${listContext.index}. ${content}\n`;
             } else {
