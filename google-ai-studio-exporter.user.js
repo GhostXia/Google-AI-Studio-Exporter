@@ -178,7 +178,8 @@
             cursor: pointer; 
             font-size: 16px; 
             font-weight: 600;
-            display: none;
+            font-weight: 600;
+            display: inline-block;
             box-shadow: 0 4px 12px rgba(26, 115, 232, 0.3);
             transition: all 0.2s ease;
             flex: 1;
@@ -413,6 +414,8 @@
         const saveBtn = overlay.querySelector('#ai-save-btn');
         const btnContainer = overlay.querySelector('.ai-btn-container');
         btnContainer.style.display = 'none';
+        // Hide any mode-selection buttons by default; only show them from showModeSelection()
+        btnContainer.querySelectorAll('.ai-mode-btn').forEach(btn => btn.style.display = 'none');
 
         if (state === 'COUNTDOWN') {
             titleEl.innerText = t('title_countdown');
@@ -452,14 +455,21 @@
             countEl.innerText = '';
 
             const btnContainer = overlay.querySelector('.ai-btn-container');
+            // Hide the persistent save/close pair while in mode-selection UI
+            const saveBtn = overlay.querySelector('#ai-save-btn');
+            const closeBtnEl = overlay.querySelector('#ai-close-btn');
+            if (saveBtn) saveBtn.style.display = 'none';
+            if (closeBtnEl) closeBtnEl.style.display = 'none';
+
             btnContainer.style.display = 'flex';
-            btnContainer.innerHTML = ''; // Clear existing buttons
+            // Remove any previously created mode buttons but keep save/close
+            btnContainer.querySelectorAll('.ai-mode-btn').forEach(btn => btn.remove());
 
             // Helper to create buttons
             const createModeButton = (id, text, isPrimary, onClick) => {
                 const btn = document.createElement('button');
                 btn.id = id;
-                btn.className = isPrimary ? 'ai-btn' : 'ai-btn ai-btn-secondary';
+                btn.className = (isPrimary ? 'ai-btn' : 'ai-btn ai-btn-secondary') + ' ai-mode-btn';
                 btn.textContent = text;
                 btn.onclick = onClick;
                 btnContainer.appendChild(btn);
@@ -877,7 +887,7 @@
         const uniqueUrls = new Set();
 
         const fileFilter = (match) => {
-            if (match[0].startsWith('!')) return false;
+            // match[0].startsWith('!') check removed as it's ineffective for LINK_REGEX matches
             const url = match[2];
             const lowerUrl = url.toLowerCase();
             const isBlob = lowerUrl.startsWith('blob:');
@@ -888,6 +898,9 @@
 
         for (const item of collectedData.values()) {
             for (const match of item.text.matchAll(LINK_REGEX)) {
+                // Skip image-style markdown links: `![alt](url)`
+                if (match.index > 0 && item.text[match.index - 1] === '!') continue;
+
                 if (fileFilter(match)) {
                     uniqueUrls.add(match[2]);
                 }
