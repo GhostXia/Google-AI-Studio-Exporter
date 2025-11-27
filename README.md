@@ -29,6 +29,11 @@ This UserScript solves the problem of "Virtual Scrolling" in Google AI Studio, a
 *   **🎨 Interactive UI**: Beautiful overlay with progress tracking, countdown, and status indicators.
 *   **🔒 Safety Lock**: Prevents double-downloads and allows emergency stop via `ESC` key.
 
+### 📁 Project Structure
+
+*   **`Stable/`**: Backup of stable and proven baseline versions. Each file is named by its version number (e.g., `v1.3.5.user.js`).
+*   **`google-ai-studio-exporter.user.js`**: The main script file (latest development version).
+
 ### 📦 Installation
 
 1.  Install the **OrangeMonkey** extension.
@@ -79,6 +84,11 @@ Here is the analysis of the code...
 *   **🧹 数据清洗**：自动去除按钮、图标、引用来源等干扰信息，只保留纯净文本。
 *   **🎨 交互式 UI**：带有倒计时、进度显示和状态提示的漂亮界面。
 *   **🔒 安全机制**：防止重复下载，支持按 `ESC` 键随时中断并保存。
+
+### 📁 项目结构
+
+*   **`Stable/`**: 备份稳定可用的基础版本。每个文件以版本号命名（例如 `v1.3.5.user.js`）。
+*   **`google-ai-studio-exporter.user.js`**: 主脚本文件（最新开发版本）。
 
 ### 📦 安装方法
 
