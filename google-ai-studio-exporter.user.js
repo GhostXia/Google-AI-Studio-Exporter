@@ -2,7 +2,7 @@
 // @name         Google AI Studio Exporter
 // @name:zh-CN   Google AI Studio 对话导出器
 // @namespace    https://github.com/GhostXia/Google-AI-Studio-Exporter
-// @version      1.3.5
+// @version      1.3.6
 // @description  Export your Gemini chat history from Google AI Studio to a text file. Features: Auto-scrolling, User/Model role differentiation, clean output, and full mobile optimization.
 // @description:zh-CN 完美导出 Google AI Studio 对话记录。具备自动滚动加载、精准去重、防抖动、User/Model角色区分，以及全平台响应式优化。支持 PC、平板、手机全平台。
 // @author       GhostXia
@@ -13,7 +13,8 @@
 // @supportURL   https://github.com/GhostXia/Google-AI-Studio-Exporter/issues
 // @downloadURL  https://github.com/GhostXia/Google-AI-Studio-Exporter/raw/main/google-ai-studio-exporter.user.js
 // @updateURL    https://github.com/GhostXia/Google-AI-Studio-Exporter/raw/main/google-ai-studio-exporter.user.js
-// @grant        none
+// @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js
+// @grant        GM_xmlhttpRequest
 // ==/UserScript==
 
 (function () {
@@ -37,6 +38,10 @@
             'title_finished': '🎉 导出成功',
             'status_finished': '文件已生成。<br>请检查下载栏。',
             'title_error': '❌ 出错了',
+            'title_mode_select': '选择导出模式',
+            'status_mode_select': '请选择导出格式',
+            'btn_mode_full': '📦 包含附件',
+            'btn_mode_text': '📄 纯文本',
             'file_header': 'Google AI Studio 完整对话记录',
             'file_time': '时间',
             'file_count': '条数',
@@ -44,7 +49,11 @@
             'role_gemini': 'Gemini',
             'err_no_scroller': '未找到滚动容器。请尝试刷新页面或手动滚动一下再试。',
             'err_no_data': '未采集到任何对话数据。请检查页面是否有对话内容。',
-            'err_runtime': '运行错误: '
+            'err_runtime': '运行错误: ',
+            'status_packaging_images': '正在打包 {n} 张图片...',
+            'status_packaging_images_progress': '打包图片: {c}/{t}',
+            'status_packaging_files': '正在打包 {n} 个文件...',
+            'status_packaging_files_progress': '打包文件: {c}/{t}'
         },
         'en': {
             'btn_export': '🚀 Export',
@@ -59,6 +68,10 @@
             'title_finished': '🎉 Finished',
             'status_finished': 'File generated.<br>Check your downloads.',
             'title_error': '❌ Error',
+            'title_mode_select': 'Select Export Mode',
+            'status_mode_select': 'Choose export format',
+            'btn_mode_full': '📦 With Attachments',
+            'btn_mode_text': '📄 Text Only',
             'file_header': 'Google AI Studio Chat History',
             'file_time': 'Time',
             'file_count': 'Count',
@@ -66,13 +79,24 @@
             'role_gemini': 'Gemini',
             'err_no_scroller': 'Scroll container not found. Try refreshing or scrolling manually.',
             'err_no_data': 'No conversation data was collected. Please check if the page has any chat content.',
-            'err_runtime': 'Runtime Error: '
+            'err_runtime': 'Runtime Error: ',
+            'status_packaging_images': 'Packaging {n} images...',
+            'status_packaging_images_progress': 'Packaging images: {c}/{t}',
+            'status_packaging_files': 'Packaging {n} files...',
+            'status_packaging_files_progress': 'Packaging files: {c}/{t}'
         }
     };
 
-    function t(key, param) {
+    function t(key, params = {}) {
         let str = translations[lang][key] || key;
-        if (param !== undefined) str = str.replace('{s}', param);
+        // Legacy support for single parameter
+        if (typeof params !== 'object' || params === null) {
+            str = str.replace(/{s}/g, params);
+            return str;
+        }
+        for (const pKey in params) {
+            str = str.replace(new RegExp(`\\{${pKey}\\}`, 'g'), params[pKey]);
+        }
         return str;
     }
 
@@ -154,7 +178,7 @@
             cursor: pointer; 
             font-size: 16px; 
             font-weight: 600;
-            display: none;
+            display: inline-block;
             box-shadow: 0 4px 12px rgba(26, 115, 232, 0.3);
             transition: all 0.2s ease;
             flex: 1;
@@ -324,6 +348,8 @@
     let hasFinished = false;
     let collectedData = new Map();
     let overlay, titleEl, statusEl, countEl, closeBtn;
+    let exportMode = null; // 'full' or 'text'
+    let cachedExportBlob = null;
 
     // ==========================================
     // 3. UI 逻辑
@@ -365,9 +391,19 @@
         const saveBtn = overlay.querySelector('#ai-save-btn');
 
         closeBtn.onclick = () => { overlay.style.display = 'none'; };
-        saveBtn.onclick = () => {
-            if (!downloadCollectedData()) {
-                updateUI('ERROR', t('err_no_data'));
+        saveBtn.onclick = async () => {
+            if (cachedExportBlob) {
+                downloadBlob(cachedExportBlob, `Gemini_Chat_v14_${Date.now()}.${exportMode === 'full' ? 'zip' : 'md'}`);
+                return;
+            }
+            try {
+                const result = await downloadCollectedData();
+                if (!result) {
+                    updateUI('ERROR', t('err_no_data'));
+                }
+            } catch (err) {
+                console.error("Failed to re-download file:", err);
+                updateUI('ERROR', t('err_runtime') + err.message);
             }
         };
     }
@@ -377,6 +413,8 @@
         const saveBtn = overlay.querySelector('#ai-save-btn');
         const btnContainer = overlay.querySelector('.ai-btn-container');
         btnContainer.style.display = 'none';
+        // Hide any mode-selection buttons by default; only show them from showModeSelection()
+        btnContainer.querySelectorAll('.ai-mode-btn').forEach(btn => btn.style.display = 'none');
 
         if (state === 'COUNTDOWN') {
             titleEl.innerText = t('title_countdown');
@@ -385,7 +423,14 @@
         } else if (state === 'SCROLLING') {
             titleEl.innerText = t('title_scrolling');
             statusEl.innerHTML = t('status_scrolling');
+            countEl.style.display = 'block';
             countEl.innerText = msg;
+        } else if (state === 'PACKAGING') {
+            titleEl.innerText = t('title_scrolling');
+            // In PACKAGING state, the status message (msg) already contains the count (e.g., "Packaging 5 images...").
+            // So we display the full message in statusEl and hide the separate countEl to avoid duplication.
+            statusEl.innerHTML = msg;
+            countEl.style.display = 'none';
         } else if (state === 'FINISHED') {
             titleEl.innerText = t('title_finished');
             statusEl.innerHTML = t('status_finished');
@@ -401,14 +446,71 @@
         }
     }
 
+    function showModeSelection() {
+        return new Promise((resolve, reject) => {
+            initUI();
+            titleEl.innerText = t('title_mode_select');
+            statusEl.innerHTML = t('status_mode_select');
+            countEl.innerText = '';
+
+            const btnContainer = overlay.querySelector('.ai-btn-container');
+            // Hide the persistent save/close pair while in mode-selection UI
+            const saveBtn = overlay.querySelector('#ai-save-btn');
+            const closeBtnEl = overlay.querySelector('#ai-close-btn');
+            if (saveBtn) saveBtn.style.display = 'none';
+            if (closeBtnEl) closeBtnEl.style.display = 'none';
+
+            btnContainer.style.display = 'flex';
+            // Remove any previously created mode buttons but keep save/close
+            btnContainer.querySelectorAll('.ai-mode-btn').forEach(btn => btn.remove());
+
+            // Helper to create buttons
+            const createModeButton = (id, text, isPrimary, onClick) => {
+                const btn = document.createElement('button');
+                btn.id = id;
+                btn.className = (isPrimary ? 'ai-btn' : 'ai-btn ai-btn-secondary') + ' ai-mode-btn';
+                btn.textContent = text;
+                btn.onclick = onClick;
+                btnContainer.appendChild(btn);
+            };
+
+            createModeButton('ai-mode-full', t('btn_mode_full'), true, () => {
+                exportMode = 'full';
+                resolve('full');
+            });
+
+            createModeButton('ai-mode-text', t('btn_mode_text'), false, () => {
+                exportMode = 'text';
+                resolve('text');
+            });
+
+            createModeButton('ai-mode-close', t('btn_close'), false, () => {
+                overlay.style.display = 'none';
+                reject(new Error('Export cancelled by user.'));
+            });
+        });
+    }
+
     // ==========================================
     // 4. 核心流程
     // ==========================================
     async function startProcess() {
         if (isRunning) return;
-        isRunning = true;
+        // isRunning = true; // Moved to after mode selection
         hasFinished = false;
         collectedData.clear();
+        cachedExportBlob = null;
+
+        // 显示模式选择
+        try {
+            await showModeSelection();
+        } catch (e) {
+            console.log('Export cancelled.');
+            // isRunning is still false here, so no cleanup needed
+            return;
+        }
+
+        isRunning = true; // Enable global ESC handler only after mode is selected
 
         for (let i = 3; i > 0; i--) {
             updateUI('COUNTDOWN', i);
@@ -560,38 +662,10 @@
     // 5. 辅助功能
     // ==========================================
 
-    function downloadCollectedData() {
-        if (collectedData.size > 0) {
-            let content = t('file_header') + "\n";
-            content += `${t('file_time')}: ${new Date().toLocaleString()}\n`;
-            content += `${t('file_count')}: ${collectedData.size}\n`;
-            content += "========================================\n\n";
-
-            for (const [id, item] of collectedData) {
-                content += `### ${item.role === 'Gemini' ? t('role_gemini') : t('role_user')}:\n${item.text}\n`;
-                content += `----------------------------------------------------------------\n\n`;
-            }
-            download(content, `Gemini_Chat_v14_${Date.now()}.txt`);
-            return true;
-        }
-        return false;
-    }
-
-    function endProcess(status, msg) {
-        if (hasFinished) return;
-        hasFinished = true;
-        isRunning = false;
-
-        if (status === "FINISHED") {
-            if (downloadCollectedData()) {
-                updateUI('FINISHED', collectedData.size);
-            } else {
-                updateUI('ERROR', t('err_no_data'));
-            }
-        } else {
-            updateUI('ERROR', msg);
-        }
-    }
+    // Shared Regex Constants
+    // Capture: 1=Alt/Text, 2=URL, 3=Optional title (supports ')' in URL and single/double-quoted titles)
+    const IMG_REGEX = /!\[([^\]]*)\]\((.+?)(\s+["'][^"']*["'])?\)/g;
+    const LINK_REGEX = /\[([^\]]*)\]\((.+?)(\s+["'][^"']*["'])?\)/g;
 
     function findRealScroller() {
         const bubble = document.querySelector('ms-chat-turn');
@@ -621,18 +695,363 @@
             const trash = ['.actions-container', '.turn-footer', 'button', 'mat-icon', 'ms-grounding-sources', 'ms-search-entry-point'];
             trash.forEach(s => clone.querySelectorAll(s).forEach(e => e.remove()));
 
-            let text = clone.innerText
-                .replace(/edit\s*more_vert/gi, '')
-                .replace(/more_vert/gi, '')
-                .replace(/Run\s*Delete/gi, '')
-                .trim();
+            let text = htmlToMarkdown(clone).trim().replace(/\n{3,}/g, '\n\n');
 
             if (text.length > 0) collectedData.set(turn.id, { role, text });
         });
     }
 
-    function download(text, name) {
-        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    function htmlToMarkdown(node, listContext = null, indent = 0) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            return node.textContent;
+        }
+
+        if (node.nodeType !== Node.ELEMENT_NODE) return '';
+
+        const tag = node.tagName.toLowerCase();
+
+        // Images
+        if (tag === 'img') {
+            const alt = node.getAttribute('alt') || '';
+            const src = node.getAttribute('src') || '';
+            return `![${alt}](${src})`;
+        }
+
+        // Code blocks
+        if (tag === 'pre') {
+            const codeEl = node.querySelector('code');
+            if (codeEl) {
+                const language = Array.from(codeEl.classList).find(c => c.startsWith('language-'))?.replace('language-', '') || '';
+                const code = codeEl.textContent;
+                return `\n\`\`\`${language}\n${code}\n\`\`\`\n`;
+            }
+        }
+
+        // Inline code
+        if (tag === 'code') {
+            const text = node.textContent;
+            // Handle backticks inside inline code for correct Markdown rendering.
+            if (text.includes('`')) {
+                return `\`\` ${text} \`\``;
+            }
+            return `\`${text}\``;
+        }
+
+        // Headings
+        if (/^h[1-6]$/.test(tag)) {
+            const level = parseInt(tag[1]);
+            return '\n' + '#'.repeat(level) + ' ' + getChildrenText(node, listContext, indent) + '\n';
+        }
+
+        // Bold
+        if (tag === 'strong' || tag === 'b') {
+            return `**${getChildrenText(node, listContext, indent)}**`;
+        }
+
+        // Italic
+        if (tag === 'em' || tag === 'i') {
+            return `*${getChildrenText(node, listContext, indent)}*`;
+        }
+
+        // Links
+        if (tag === 'a') {
+            const href = node.getAttribute('href') || '';
+            const text = getChildrenText(node, listContext, indent);
+            return `[${text}](${href})`;
+        }
+
+        // Lists - pass context to children
+        if (tag === 'ul' || tag === 'ol') {
+            const listType = tag; // 'ul' or 'ol'
+            let index = 0;
+            let result = '\n';
+
+            for (const child of node.childNodes) {
+                if (child.nodeType === Node.ELEMENT_NODE && child.tagName.toLowerCase() === 'li') {
+                    index++;
+                    // Pass indent + 1 to children
+                    result += htmlToMarkdown(child, { type: listType, index: index }, indent + 1);
+                } else {
+                    // Pass indent + 1 to children even if not li (e.g. nested ul)
+                    result += htmlToMarkdown(child, listContext, indent + 1);
+                }
+            }
+
+            return result + '\n';
+        }
+
+        // List items - use context to determine format
+        if (tag === 'li') {
+            // Children of li are at the same indent level as the li itself (which is already indented by parent)
+            const content = getChildrenText(node, listContext, indent);
+            // Render bullet at indent - 1
+            const indentStr = '  '.repeat(Math.max(0, indent - 1));
+            if (listContext && listContext.type === 'ol') {
+                return `${indentStr}${listContext.index}. ${content}\n`;
+            } else {
+                return `${indentStr}- ${content}\n`;
+            }
+        }
+
+        // Line breaks
+        if (tag === 'br') {
+            return '  \n';
+        }
+
+        // Blockquotes - prefix each line with >
+        if (tag === 'blockquote') {
+            const content = getChildrenText(node, listContext, indent);
+            // Split by lines and prefix each with "> "
+            return '\n' + content.split('\n')
+                .map(line => `> ${line}`)
+                .join('\n') + '\n';
+        }
+
+        // Block elements
+        if (['div', 'p'].includes(tag)) {
+            return '\n' + getChildrenText(node, listContext, indent) + '\n';
+        }
+
+        return getChildrenText(node, listContext, indent);
+    }
+
+    function getChildrenText(node, listContext = null, indent = 0) {
+        return Array.from(node.childNodes).map(child => htmlToMarkdown(child, listContext, indent)).join('');
+    }
+
+    // Helper: Download text-only mode
+    function downloadTextOnly() {
+        let content = `# ${t('file_header')}\n\n`;
+        content += `**${t('file_time')}:** ${new Date().toLocaleString()}\n\n`;
+        content += `**${t('file_count')}:** ${collectedData.size}\n\n`;
+        content += "---\n\n";
+
+        for (const [id, item] of collectedData) {
+            const roleName = item.role === 'Gemini' ? t('role_gemini') : t('role_user');
+            content += `## ${roleName}\n\n${item.text}\n\n`;
+            content += `---\n\n`;
+        }
+
+        const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+        cachedExportBlob = blob;
+        downloadBlob(blob, `Gemini_Chat_v14_${Date.now()}.md`);
+    }
+
+    // Generic Helper: Process resources (images or files)
+    async function processResources(uniqueUrls, zipFolder, config) {
+        const resourceMap = new Map();
+
+        if (uniqueUrls.size > 0) {
+            updateUI('PACKAGING', t(config.statusStart, { n: uniqueUrls.size }));
+            let completedCount = 0;
+
+            const promises = Array.from(uniqueUrls).map(async (url, index) => {
+                try {
+                    const blob = await fetchResource(url);
+                    if (blob) {
+                        const filename = config.filenameGenerator(url, index, blob);
+                        zipFolder.file(filename, blob);
+                        resourceMap.set(url, `${config.subDir}/${filename}`);
+                    }
+                } catch (e) {
+                    console.error(`${config.subDir} download failed:`, url, e);
+                }
+                completedCount++;
+                if (completedCount % 5 === 0 || completedCount === uniqueUrls.size) {
+                    updateUI('PACKAGING', t(config.statusProgress, { c: completedCount, t: uniqueUrls.size }));
+                }
+            });
+
+            await Promise.all(promises);
+        }
+        return resourceMap;
+    }
+
+    // Helper: Collect unique image URLs from all messages
+    function collectImageUrls() {
+        const uniqueUrls = new Set();
+        for (const item of collectedData.values()) {
+            for (const match of item.text.matchAll(IMG_REGEX)) {
+                uniqueUrls.add(match[2]);
+            }
+        }
+        return uniqueUrls;
+    }
+
+    // Helper: Process and download images
+    async function processImages(imgFolder) {
+        const uniqueUrls = collectImageUrls();
+        return processResources(uniqueUrls, imgFolder, {
+            subDir: 'images',
+            statusStart: 'status_packaging_images',
+            statusProgress: 'status_packaging_images_progress',
+            filenameGenerator: (url, index, blob) => {
+                const extension = (blob.type.split('/')[1] || 'png').split('+')[0];
+                return `image_${index}.${extension}`;
+            }
+        });
+    }
+
+    // Helper: Collect unique file URLs from all messages
+    function collectFileUrls() {
+        const downloadableExtensions = ['.pdf', '.csv', '.txt', '.json', '.py', '.js', '.html', '.css', '.md', '.zip', '.tar', '.gz'];
+        const uniqueUrls = new Set();
+
+        const fileFilter = (match) => {
+            // match[0].startsWith('!') check removed as it's ineffective for LINK_REGEX matches
+            const url = match[2];
+            const lowerUrl = url.toLowerCase();
+            const isBlob = lowerUrl.startsWith('blob:');
+            const isGoogleStorage = lowerUrl.includes('googlestorage') || lowerUrl.includes('googleusercontent');
+            const hasExt = downloadableExtensions.some(ext => lowerUrl.split('?')[0].endsWith(ext));
+            return isBlob || isGoogleStorage || hasExt;
+        };
+
+        for (const item of collectedData.values()) {
+            for (const match of item.text.matchAll(LINK_REGEX)) {
+                // Skip image-style markdown links: `![alt](url)`
+                if (match.index > 0 && item.text[match.index - 1] === '!') continue;
+
+                if (fileFilter(match)) {
+                    uniqueUrls.add(match[2]);
+                }
+            }
+        }
+        return uniqueUrls;
+    }
+
+    // Helper: Process and download files
+    async function processFiles(fileFolder) {
+        const uniqueUrls = collectFileUrls();
+        return processResources(uniqueUrls, fileFolder, {
+            subDir: 'files',
+            statusStart: 'status_packaging_files',
+            statusProgress: 'status_packaging_files_progress',
+            filenameGenerator: (url, index, blob) => {
+                let filename = "file";
+                try {
+                    const urlObj = new URL(url);
+                    filename = urlObj.pathname.substring(urlObj.pathname.lastIndexOf('/') + 1);
+                } catch (e) {
+                    filename = url.split('/').pop().split('?')[0];
+                }
+
+                let decodedFilename = filename;
+                try {
+                    decodedFilename = decodeURIComponent(filename);
+                } catch (e) {
+                    console.warn(`Could not decode filename: ${filename}`, e);
+                }
+                // Increased limit from 50 to 100 as per PR review
+                if (!decodedFilename || decodedFilename.length > 100) {
+                    const extMatch = filename.match(/\.[^./?]+$/);
+                    const ext = extMatch ? extMatch[0] : '';
+                    decodedFilename = `file_${index}${ext}`;
+                }
+                return `${index}_${decodedFilename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+            }
+        });
+    }
+
+    // Helper: Generate Markdown content with URL replacements
+    function generateMarkdownContent(imgMap, fileMap) {
+        let content = `# ${t('file_header')}\n\n`;
+        content += `**${t('file_time')}:** ${new Date().toLocaleString()}\n\n`;
+        content += `**${t('file_count')}:** ${collectedData.size}\n\n`;
+        content += "---\n\n";
+
+        for (const [id, item] of collectedData) {
+            const roleName = item.role === 'Gemini' ? t('role_gemini') : t('role_user');
+            let processedText = item.text;
+
+            // Replace image URLs
+            processedText = processedText.replace(IMG_REGEX, (match, alt, url, title) => {
+                if (imgMap.has(url)) {
+                    const titleStr = title || '';
+                    return `![${alt}](${imgMap.get(url)}${titleStr})`;
+                }
+                return match;
+            });
+
+            // Replace file URLs
+            processedText = processedText.replace(LINK_REGEX, (match, text, url, title) => {
+                if (fileMap.has(url)) {
+                    const titleStr = title || '';
+                    return `[${text}](${fileMap.get(url)}${titleStr})`;
+                }
+                return match;
+            });
+
+            content += `## ${roleName}\n\n${processedText}\n\n`;
+            content += `---\n\n`;
+        }
+
+        return content;
+    }
+
+    // Main function: orchestrate the download process
+    async function downloadCollectedData() {
+        if (collectedData.size === 0) return false;
+
+        // Text-only mode
+        if (exportMode === 'text') {
+            downloadTextOnly();
+            return true;
+        }
+
+        // Full mode with attachments
+        const zip = new JSZip();
+        const imgFolder = zip.folder("images");
+        const fileFolder = zip.folder("files");
+
+        // Process images and files in parallel (memory-efficient approach)
+        const [imgMap, fileMap] = await Promise.all([
+            processImages(imgFolder),
+            processFiles(fileFolder)
+        ]);
+
+        // Generate final Markdown content
+        const content = generateMarkdownContent(imgMap, fileMap);
+
+        // Create and download ZIP
+        zip.file("chat_history.md", content);
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        cachedExportBlob = zipBlob;
+        downloadBlob(zipBlob, `Gemini_Chat_v14_${Date.now()}.zip`);
+
+        return true;
+    }
+
+    function fetchResource(url) {
+        return new Promise((resolve) => {
+            if (typeof GM_xmlhttpRequest !== 'undefined') {
+                GM_xmlhttpRequest({
+                    method: "GET",
+                    url: url,
+                    responseType: "blob",
+                    onload: (response) => {
+                        if (response.status >= 200 && response.status < 300) {
+                            resolve(response.response);
+                        } else {
+                            console.warn(`Resource fetch failed with status ${response.status}:`, url);
+                            resolve(null);
+                        }
+                    },
+                    onerror: () => resolve(null)
+                });
+            } else {
+                fetch(url)
+                    .then(r => {
+                        if (r.ok) return r.blob();
+                        return null;
+                    })
+                    .then(resolve)
+                    .catch(() => resolve(null));
+            }
+        });
+    }
+
+    function downloadBlob(blob, name) {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -640,6 +1059,28 @@
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    function endProcess(status, msg) {
+        if (hasFinished) return;
+        hasFinished = true;
+        isRunning = false;
+
+        if (status === "FINISHED") {
+            if (collectedData.size > 0) {
+                downloadCollectedData().then(() => {
+                    updateUI('FINISHED', collectedData.size);
+                }).catch(err => {
+                    console.error("Failed to generate and download file:", err);
+                    updateUI('ERROR', t('err_runtime') + err.message);
+                });
+            } else {
+                updateUI('ERROR', t('err_no_data'));
+            }
+        } else {
+            updateUI('ERROR', msg);
+        }
     }
 
     function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
