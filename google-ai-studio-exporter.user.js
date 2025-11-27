@@ -497,7 +497,7 @@
     // ==========================================
     async function startProcess() {
         if (isRunning) return;
-        isRunning = true;
+        // isRunning = true; // Moved to after mode selection
         hasFinished = false;
         collectedData.clear();
         cachedZipBlob = null;
@@ -507,9 +507,11 @@
             await showModeSelection();
         } catch (e) {
             console.log('Export cancelled.');
-            isRunning = false;
+            // isRunning is still false here, so no cleanup needed
             return;
         }
+
+        isRunning = true; // Enable global ESC handler only after mode is selected
 
         for (let i = 3; i > 0; i--) {
             updateUI('COUNTDOWN', i);
@@ -662,9 +664,9 @@
     // ==========================================
 
     // Shared Regex Constants
-    // Capture: 1=Alt/Text, 2=URL, 3=Title(optional)
-    const IMG_REGEX = /!\[([^\]]*)\]\(([^\s)]+)(\s+"[^"]*")?\)/g;
-    const LINK_REGEX = /\[([^\]]*)\]\(([^\s)]+)(\s+"[^"]*")?\)/g;
+    // Capture: 1=Alt/Text, 2=URL, 3=Optional title (supports ')' in URL and single/double-quoted titles)
+    const IMG_REGEX = /!\[([^\]]*)\]\((.+?)(\s+["'][^"']*["'])?\)/g;
+    const LINK_REGEX = /\[([^\]]*)\]\((.+?)(\s+["'][^"']*["'])?\)/g;
 
     function findRealScroller() {
         const candidates = document.querySelectorAll('[role="main"], .conversation-container, ms-chat-container');
@@ -1022,6 +1024,7 @@
                         if (response.status >= 200 && response.status < 300) {
                             resolve(response.response);
                         } else {
+                            console.warn(`Resource fetch failed with status ${response.status}:`, url);
                             resolve(null);
                         }
                     },
@@ -1047,6 +1050,7 @@
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
 
     function endProcess(status, msg) {
