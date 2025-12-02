@@ -697,7 +697,7 @@
             // Check if the element is visible (offsetParent is null for hidden elements)
             if (!turn.id || collectedData.has(turn.id) || turn.offsetParent === null || window.getComputedStyle(turn).visibility === 'hidden') return;
 
-            const role = (turn.querySelector('[data-turn-role="Model"]') || turn.innerHTML.includes('model-prompt-container')) ? ROLE_GEMINI : ROLE_USER;
+            const role = (turn.querySelector('[data-turn-role="Model"]') || turn.querySelector('[class*="model-prompt-container"]')) ? ROLE_GEMINI : ROLE_USER;
 
             const clone = turn.cloneNode(true);
             const trash = ['.actions-container', '.turn-footer', 'button', 'mat-icon', 'ms-grounding-sources', 'ms-search-entry-point'];
