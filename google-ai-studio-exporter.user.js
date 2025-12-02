@@ -2,7 +2,7 @@
 // @name         Google AI Studio Exporter
 // @name:zh-CN   Google AI Studio 对话导出器
 // @namespace    https://github.com/GhostXia/Google-AI-Studio-Exporter
-// @version      1.3.6
+// @version      1.3.7
 // @description  Export your Gemini chat history from Google AI Studio to a text file. Features: Auto-scrolling, User/Model role differentiation, clean output, and full mobile optimization.
 // @description:zh-CN 完美导出 Google AI Studio 对话记录。具备自动滚动加载、精准去重、防抖动、User/Model角色区分，以及全平台响应式优化。支持 PC、平板、手机全平台。
 // @author       GhostXia
@@ -629,7 +629,7 @@
 
         try {
             while (isRunning) {
-                captureData();
+                captureData(scroller);
                 updateUI('SCROLLING', collectedData.size);
 
                 scroller.scrollBy({ top: window.innerHeight * 0.7, behavior: 'smooth' });
@@ -668,7 +668,8 @@
     const LINK_REGEX = /\[([^\]]*)\]\((.+?)(\s+["'][^"']*["'])?\)/g;
 
     function findRealScroller() {
-        const bubble = document.querySelector('ms-chat-turn');
+        // Prioritize finding chat turns within the main content area to avoid sidebars
+        const bubble = document.querySelector('main ms-chat-turn') || document.querySelector('ms-chat-turn');
         if (!bubble) {
             return document.querySelector('div[class*="scroll"]') || document.body;
         }
@@ -684,10 +685,12 @@
         return document.documentElement;
     }
 
-    function captureData() {
-        const turns = document.querySelectorAll('ms-chat-turn');
+    function captureData(scroller = document) {
+        // Scope the query to the scroller container to avoid capturing elements from other parts of the page
+        const turns = scroller.querySelectorAll('ms-chat-turn');
         turns.forEach(turn => {
-            if (!turn.id || collectedData.has(turn.id)) return;
+            // Check if the element is visible (offsetParent is null for hidden elements)
+            if (!turn.id || collectedData.has(turn.id) || turn.offsetParent === null) return;
 
             const role = (turn.querySelector('[data-turn-role="Model"]') || turn.innerHTML.includes('model-prompt-container')) ? "Gemini" : "User";
 
