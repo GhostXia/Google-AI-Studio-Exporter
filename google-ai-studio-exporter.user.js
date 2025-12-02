@@ -690,7 +690,7 @@
         const turns = scroller.querySelectorAll('ms-chat-turn');
         turns.forEach(turn => {
             // Check if the element is visible (offsetParent is null for hidden elements)
-            if (!turn.id || collectedData.has(turn.id) || turn.offsetParent === null) return;
+            if (!turn.id || collectedData.has(turn.id) || turn.offsetParent === null || window.getComputedStyle(turn).visibility === 'hidden') return;
 
             const role = (turn.querySelector('[data-turn-role="Model"]') || turn.innerHTML.includes('model-prompt-container')) ? "Gemini" : "User";
 
@@ -698,35 +698,20 @@
             const trash = ['.actions-container', '.turn-footer', 'button', 'mat-icon', 'ms-grounding-sources', 'ms-search-entry-point'];
             trash.forEach(s => clone.querySelectorAll(s).forEach(e => e.remove()));
 
-            // For Model turns, check if there are Thoughts
-            let thoughtsText = '';
-            let mainText = '';
-
             if (role === "Gemini") {
-                // Extract Thoughts separately
                 const thoughtChunk = clone.querySelector('ms-thought-chunk');
                 if (thoughtChunk) {
-                    thoughtsText = htmlToMarkdown(thoughtChunk).trim().replace(/\n{3,}/g, '\n\n');
-                    // Remove thought chunk from clone to avoid duplication
+                    const thoughtsText = htmlToMarkdown(thoughtChunk).trim().replace(/\n{3,}/g, '\n\n');
                     thoughtChunk.remove();
+                    if (thoughtsText.length > 0) {
+                        collectedData.set(turn.id + '-thoughts', { role: 'Gemini-Thoughts', text: thoughtsText });
+                    }
                 }
+            }
 
-                // Extract main response (without thoughts)
-                mainText = htmlToMarkdown(clone).trim().replace(/\n{3,}/g, '\n\n');
-
-                // If we have thoughts, save them as a separate entry with a special marker
-                if (thoughtsText.length > 0) {
-                    collectedData.set(turn.id + '-thoughts', { role: 'Gemini-Thoughts', text: thoughtsText });
-                }
-
-                // Save main response
-                if (mainText.length > 0) {
-                    collectedData.set(turn.id, { role, text: mainText });
-                }
-            } else {
-                // For User turns, process normally
-                let text = htmlToMarkdown(clone).trim().replace(/\n{3,}/g, '\n\n');
-                if (text.length > 0) collectedData.set(turn.id, { role, text });
+            const text = htmlToMarkdown(clone).trim().replace(/\n{3,}/g, '\n\n');
+            if (text.length > 0) {
+                collectedData.set(turn.id, { role, text });
             }
         });
     }
@@ -849,6 +834,18 @@
         return Array.from(node.childNodes).map(child => htmlToMarkdown(child, listContext, indent)).join('');
     }
 
+    // Helper: Get role name for display
+    function getRoleName(role) {
+        switch (role) {
+            case 'Gemini-Thoughts':
+                return 'Thoughts';
+            case 'Gemini':
+                return t('role_gemini');
+            default:
+                return t('role_user');
+        }
+    }
+
     // Helper: Download text-only mode
     function downloadTextOnly() {
         let content = `# ${t('file_header')}\n\n`;
@@ -857,14 +854,7 @@
         content += "---\n\n";
 
         for (const [id, item] of collectedData) {
-            let roleName;
-            if (item.role === 'Gemini-Thoughts') {
-                roleName = 'Thoughts';
-            } else if (item.role === 'Gemini') {
-                roleName = t('role_gemini');
-            } else {
-                roleName = t('role_user');
-            }
+            const roleName = getRoleName(item.role);
             content += `## ${roleName}\n\n${item.text}\n\n`;
             content += `---\n\n`;
         }
@@ -998,14 +988,7 @@
         content += "---\n\n";
 
         for (const [id, item] of collectedData) {
-            let roleName;
-            if (item.role === 'Gemini-Thoughts') {
-                roleName = 'Thoughts';
-            } else if (item.role === 'Gemini') {
-                roleName = t('role_gemini');
-            } else {
-                roleName = t('role_user');
-            }
+            const roleName = getRoleName(item.role);
             let processedText = item.text;
 
             // Replace image URLs
