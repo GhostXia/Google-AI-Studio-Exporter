@@ -698,9 +698,36 @@
             const trash = ['.actions-container', '.turn-footer', 'button', 'mat-icon', 'ms-grounding-sources', 'ms-search-entry-point'];
             trash.forEach(s => clone.querySelectorAll(s).forEach(e => e.remove()));
 
-            let text = htmlToMarkdown(clone).trim().replace(/\n{3,}/g, '\n\n');
+            // For Model turns, check if there are Thoughts
+            let thoughtsText = '';
+            let mainText = '';
 
-            if (text.length > 0) collectedData.set(turn.id, { role, text });
+            if (role === "Gemini") {
+                // Extract Thoughts separately
+                const thoughtChunk = clone.querySelector('ms-thought-chunk');
+                if (thoughtChunk) {
+                    thoughtsText = htmlToMarkdown(thoughtChunk).trim().replace(/\n{3,}/g, '\n\n');
+                    // Remove thought chunk from clone to avoid duplication
+                    thoughtChunk.remove();
+                }
+
+                // Extract main response (without thoughts)
+                mainText = htmlToMarkdown(clone).trim().replace(/\n{3,}/g, '\n\n');
+
+                // If we have thoughts, save them as a separate entry with a special marker
+                if (thoughtsText.length > 0) {
+                    collectedData.set(turn.id + '-thoughts', { role: 'Gemini-Thoughts', text: thoughtsText });
+                }
+
+                // Save main response
+                if (mainText.length > 0) {
+                    collectedData.set(turn.id, { role, text: mainText });
+                }
+            } else {
+                // For User turns, process normally
+                let text = htmlToMarkdown(clone).trim().replace(/\n{3,}/g, '\n\n');
+                if (text.length > 0) collectedData.set(turn.id, { role, text });
+            }
         });
     }
 
@@ -830,7 +857,14 @@
         content += "---\n\n";
 
         for (const [id, item] of collectedData) {
-            const roleName = item.role === 'Gemini' ? t('role_gemini') : t('role_user');
+            let roleName;
+            if (item.role === 'Gemini-Thoughts') {
+                roleName = 'Thoughts';
+            } else if (item.role === 'Gemini') {
+                roleName = t('role_gemini');
+            } else {
+                roleName = t('role_user');
+            }
             content += `## ${roleName}\n\n${item.text}\n\n`;
             content += `---\n\n`;
         }
@@ -964,7 +998,14 @@
         content += "---\n\n";
 
         for (const [id, item] of collectedData) {
-            const roleName = item.role === 'Gemini' ? t('role_gemini') : t('role_user');
+            let roleName;
+            if (item.role === 'Gemini-Thoughts') {
+                roleName = 'Thoughts';
+            } else if (item.role === 'Gemini') {
+                roleName = t('role_gemini');
+            } else {
+                roleName = t('role_user');
+            }
             let processedText = item.text;
 
             // Replace image URLs
