@@ -668,6 +668,9 @@
     // Capture: 1=Alt/Text, 2=URL, 3=Optional title (supports ')' in URL and single/double-quoted titles)
     const IMG_REGEX = /!\[([^\]]*)\]\((.+?)(\s+["'][^"']*["'])?\)/g;
     const LINK_REGEX = /\[([^\]]*)\]\((.+?)(\s+["'][^"']*["'])?\)/g;
+    const ROLE_USER = 'User';
+    const ROLE_GEMINI = 'Gemini';
+    const ROLE_GEMINI_THOUGHTS = 'Gemini-Thoughts';
 
     function findRealScroller() {
         // Prioritize finding chat turns within the main content area to avoid sidebars
@@ -694,7 +697,7 @@
             // Check if the element is visible (offsetParent is null for hidden elements)
             if (!turn.id || collectedData.has(turn.id) || turn.offsetParent === null || window.getComputedStyle(turn).visibility === 'hidden') return;
 
-            const role = (turn.querySelector('[data-turn-role="Model"]') || turn.innerHTML.includes('model-prompt-container')) ? "Gemini" : "User";
+            const role = (turn.querySelector('[data-turn-role="Model"]') || turn.innerHTML.includes('model-prompt-container')) ? ROLE_GEMINI : ROLE_USER;
 
             const clone = turn.cloneNode(true);
             const trash = ['.actions-container', '.turn-footer', 'button', 'mat-icon', 'ms-grounding-sources', 'ms-search-entry-point'];
@@ -703,15 +706,15 @@
             if (role === "Gemini") {
                 const thoughtChunk = clone.querySelector('ms-thought-chunk');
                 if (thoughtChunk) {
-                    const thoughtsText = htmlToMarkdown(thoughtChunk).trim().replace(/\n{3,}/g, '\n\n');
+                    const thoughtsText = cleanMarkdown(htmlToMarkdown(thoughtChunk));
                     thoughtChunk.remove();
                     if (thoughtsText.length > 0) {
-                        collectedData.set(turn.id + '-thoughts', { role: 'Gemini-Thoughts', text: thoughtsText });
+                        collectedData.set(turn.id + '-thoughts', { role: ROLE_GEMINI_THOUGHTS, text: thoughtsText });
                     }
                 }
             }
 
-            const text = htmlToMarkdown(clone).trim().replace(/\n{3,}/g, '\n\n');
+            const text = cleanMarkdown(htmlToMarkdown(clone));
             if (text.length > 0) {
                 collectedData.set(turn.id, { role, text });
             }
@@ -836,12 +839,16 @@
         return Array.from(node.childNodes).map(child => htmlToMarkdown(child, listContext, indent)).join('');
     }
 
+    function cleanMarkdown(str) {
+        return str.trim().replace(/\n{3,}/g, '\n\n');
+    }
+
     // Helper: Get role name for display
     function getRoleName(role) {
         switch (role) {
-            case 'Gemini-Thoughts':
+            case ROLE_GEMINI_THOUGHTS:
                 return t('role_thoughts');
-            case 'Gemini':
+            case ROLE_GEMINI:
                 return t('role_gemini');
             default:
                 return t('role_user');
