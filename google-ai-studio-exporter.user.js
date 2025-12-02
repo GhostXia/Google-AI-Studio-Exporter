@@ -47,6 +47,7 @@
             'file_count': '条数',
             'role_user': 'User',
             'role_gemini': 'Gemini',
+            'role_thoughts': '思考过程',
             'err_no_scroller': '未找到滚动容器。请尝试刷新页面或手动滚动一下再试。',
             'err_no_data': '未采集到任何对话数据。请检查页面是否有对话内容。',
             'err_runtime': '运行错误: ',
@@ -77,6 +78,7 @@
             'file_count': 'Count',
             'role_user': 'User',
             'role_gemini': 'Gemini',
+            'role_thoughts': 'Thoughts',
             'err_no_scroller': 'Scroll container not found. Try refreshing or scrolling manually.',
             'err_no_data': 'No conversation data was collected. Please check if the page has any chat content.',
             'err_runtime': 'Runtime Error: ',
@@ -838,7 +840,7 @@
     function getRoleName(role) {
         switch (role) {
             case 'Gemini-Thoughts':
-                return 'Thoughts';
+                return t('role_thoughts');
             case 'Gemini':
                 return t('role_gemini');
             default:
