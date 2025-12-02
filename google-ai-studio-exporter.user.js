@@ -703,7 +703,7 @@
             const trash = ['.actions-container', '.turn-footer', 'button', 'mat-icon', 'ms-grounding-sources', 'ms-search-entry-point'];
             trash.forEach(s => clone.querySelectorAll(s).forEach(e => e.remove()));
 
-            if (role === "Gemini") {
+            if (role === ROLE_GEMINI) {
                 const thoughtChunk = clone.querySelector('ms-thought-chunk');
                 if (thoughtChunk) {
                     const thoughtsText = cleanMarkdown(htmlToMarkdown(thoughtChunk));
