@@ -838,7 +838,7 @@
     function getRoleName(role) {
         switch (role) {
             case 'Gemini-Thoughts':
-                return 'Thoughts';
+                return t('role_thoughts');
             case 'Gemini':
                 return t('role_gemini');
             default:
