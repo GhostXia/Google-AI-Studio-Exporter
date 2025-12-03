@@ -460,6 +460,8 @@
         return computeCounts(turnOrder, collectedData, false);
     }
 
+    // 更新遮罩界面状态（支持多种流程状态）
+    // Update overlay UI state (supports multiple workflow states)
     function updateUI(state, msg = "") {
         initUI();
         const saveBtn = overlay.querySelector('#ai-save-btn');
@@ -499,6 +501,8 @@
         }
     }
 
+    // 显示导出模式选择（附件/纯文本）
+    // Show export mode selection (attachments/text-only)
     function showModeSelection() {
         return new Promise((resolve, reject) => {
             initUI();
@@ -544,6 +548,8 @@
         });
     }
 
+    // 当 ZIP 库不可用时的回退提示（纯文本/重试/取消）
+    // Fallback prompt when ZIP library is unavailable (text/retry/cancel)
     function showZipFallbackPrompt() {
         return new Promise((resolve) => {
             initUI();
@@ -583,6 +589,8 @@
         });
     }
 
+    // 用户按下 ESC 的取消提示（选择继续打包或改为纯文本）
+    // Cancel prompt when user presses ESC (continue attachments or text-only)
     function showCancelPrompt() {
         return new Promise((resolve) => {
             initUI();
@@ -615,6 +623,8 @@
     // ==========================================
     // 4. 核心流程
     // ==========================================
+    // 导出主流程：模式选择 → 倒计时 → 采集 → 导出
+    // Main export flow: mode select → countdown → capture → export
     async function startProcess() {
         if (isRunning) return;
         // isRunning = true; // Moved to after mode selection
@@ -1080,11 +1090,15 @@
         collectedData = newMap;
     }
 
+    // 统计导出内容的段落数（不含 User 段落）
+    // Count exported paragraphs (excluding User paragraphs)
     function countParagraphs() {
         return computeCounts(turnOrder, collectedData, false).paragraphs;
     }
 
     // Helper: Download text-only mode
+    // 仅文本导出：生成 Markdown 并下载
+    // Text-only export: generate Markdown and download
     function downloadTextOnly() {
         let content = `# ${t('file_header')}`+"\n\n";
         content += `**${t('file_time')}:** ${new Date().toLocaleString()}`+"\n\n";
@@ -1113,6 +1127,8 @@
     }
 
     // Generic Helper: Process resources (images or files)
+    // 通用打包助手：并发下载资源、支持进度与取消
+    // Generic packaging helper: concurrent downloads with progress and cancel support
     async function processResources(uniqueUrls, zipFolder, config) {
         const resourceMap = new Map();
 
@@ -1307,6 +1323,8 @@
         return content;
     }
 
+    // 加载 JSZip 的备用方案（GM_xmlhttpRequest 或注入 CDN 脚本）
+    // Fallback loader for JSZip (GM_xmlhttpRequest or inject CDN script)
     async function ensureJSZip() {
         if (typeof JSZip !== 'undefined') return JSZip;
         const url = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
@@ -1338,6 +1356,8 @@
     }
 
     // Main function: orchestrate the download process
+    // 导出调度：纯文本/附件模式、ZIP 生成与回退
+    // Export orchestrator: text/attachments modes, ZIP generation & fallback
     async function downloadCollectedData() {
         if (collectedData.size === 0) return false;
         // Normalize conversation before exporting (affects both modes)
@@ -1408,6 +1428,8 @@
         return true;
     }
 
+    // 资源下载：支持 GM_xmlhttpRequest 与 fetch，并内置超时
+    // Resource fetcher: supports GM_xmlhttpRequest and fetch, with timeout
     function fetchResource(url) {
         const timeoutMs = 10000;
         return new Promise((resolve) => {
@@ -1476,6 +1498,8 @@
 
     function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+    // 全局 ESC 处理：弹出取消提示并根据选择继续或回退
+    // Global ESC handler: show cancel prompt and proceed based on choice
     document.addEventListener('keydown', async e => {
         if (e.key === 'Escape' && isRunning) {
             cancelRequested = true;
