@@ -696,7 +696,7 @@
 
     function captureData(scroller = document) {
         // Scope the query to the scroller container to avoid capturing elements from other parts of the page
-        const turns = scroller.querySelectorAll('ms-chat-turn, .chat-turn-container');
+        const turns = scroller.querySelectorAll('ms-chat-turn');
 
         // Helper to derive a stable turn id from container or inner chunks
         const getTurnId = (el) => {
@@ -706,10 +706,10 @@
         };
 
         // Update turn order based on visible turns
-        const visibleTurnIds = Array.from(turns)
+        const visibleTurnIds = Array.from(new Set(Array.from(turns)
             .filter(t => t.offsetParent !== null && window.getComputedStyle(t).visibility !== 'hidden')
             .map(t => getTurnId(t))
-            .filter(id => !!id);
+            .filter(id => !!id)));
         updateTurnOrder(visibleTurnIds);
 
         turns.forEach(turn => {
