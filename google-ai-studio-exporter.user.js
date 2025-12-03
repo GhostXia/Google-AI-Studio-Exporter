@@ -696,6 +696,7 @@
 
     function captureData(scroller = document) {
         // Scope the query to the scroller container to avoid capturing elements from other parts of the page
+        const turns = scroller.querySelectorAll('ms-chat-turn');
         // Update turn order based on visible turns
         const visibleTurnIds = Array.from(turns)
             .filter(t => t.id && t.offsetParent !== null && window.getComputedStyle(t).visibility !== 'hidden')
