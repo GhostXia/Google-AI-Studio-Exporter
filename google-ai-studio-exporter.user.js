@@ -62,7 +62,10 @@
             'title_zip_missing': 'JSZip 加载失败',
             'status_zip_missing': '无法加载附件打包库。是否回退到纯文本？',
             'btn_retry': '重试',
-            'btn_cancel': '取消'
+            'btn_cancel': '取消',
+            'status_esc_hint': '按 <b>ESC</b> 可取消并选择保存方式',
+            'title_cancel': '已取消导出',
+            'status_cancel': '请选择继续打包附件或改为纯文本保存'
         },
         'en': {
             'btn_export': '🚀 Export',
@@ -101,7 +104,10 @@
             'title_zip_missing': 'JSZip load failed',
             'status_zip_missing': 'Could not load ZIP library. Fallback to text?',
             'btn_retry': 'Retry',
-            'btn_cancel': 'Cancel'
+            'btn_cancel': 'Cancel',
+            'status_esc_hint': 'Press <b>ESC</b> to cancel and choose how to save',
+            'title_cancel': 'Export cancelled',
+            'status_cancel': 'Choose to continue attachments or save as text'
         }
     };
 
@@ -475,9 +481,7 @@
             countEl.innerText = `${t('ui_turns')}: ${turns}\n${t('ui_paragraphs')}: ${paragraphs}`;
         } else if (state === 'PACKAGING') {
             titleEl.innerText = t('title_scrolling');
-            // In PACKAGING state, the status message (msg) already contains the count (e.g., "Packaging 5 images...").
-            // So we display the full message in statusEl and hide the separate countEl to avoid duplication.
-            statusEl.innerHTML = msg;
+            statusEl.innerHTML = msg + '<br>' + t('status_esc_hint');
             countEl.style.display = 'none';
         } else if (state === 'FINISHED') {
             titleEl.innerText = t('title_finished');
@@ -576,6 +580,35 @@
                 overlay.style.display = 'none';
                 resolve('cancel');
             });
+        });
+    }
+
+    function showCancelPrompt() {
+        return new Promise((resolve) => {
+            initUI();
+            titleEl.innerText = t('title_cancel');
+            statusEl.innerHTML = t('status_cancel');
+            countEl.innerText = '';
+            const btnContainer = overlay.querySelector('.ai-btn-container');
+            const saveBtn = overlay.querySelector('#ai-save-btn');
+            const closeBtnEl = overlay.querySelector('#ai-close-btn');
+            if (saveBtn) saveBtn.style.display = 'none';
+            if (closeBtnEl) closeBtnEl.style.display = 'none';
+            btnContainer.style.display = 'flex';
+            btnContainer.querySelectorAll('.ai-mode-btn').forEach(btn => btn.remove());
+
+            const createModeButton = (id, text, isPrimary, onClick) => {
+                const btn = document.createElement('button');
+                btn.id = id;
+                btn.className = (isPrimary ? 'ai-btn' : 'ai-btn ai-btn-secondary') + ' ai-mode-btn';
+                btn.textContent = text;
+                btn.onclick = onClick;
+                btnContainer.appendChild(btn);
+            };
+
+            createModeButton('ai-cancel-text', t('btn_mode_text'), true, () => resolve('text'));
+            createModeButton('ai-cancel-retry', t('btn_retry'), false, () => resolve('retry'));
+            createModeButton('ai-cancel-close', t('btn_cancel'), false, () => resolve('cancel'));
         });
     }
 
@@ -1446,11 +1479,22 @@
     document.addEventListener('keydown', async e => {
         if (e.key === 'Escape' && isRunning) {
             cancelRequested = true;
-            isRunning = false;
-            normalizeConversation();
-            exportMode = 'text';
-            try { await downloadTextOnly(); } catch (_) {}
-            updateUI('FINISHED', collectedData.size);
+            const choice = await showCancelPrompt();
+            if (choice === 'text') {
+                normalizeConversation();
+                exportMode = 'text';
+                try { await downloadTextOnly(); } catch (_) {}
+                updateUI('FINISHED', collectedData.size);
+                isRunning = false;
+            } else if (choice === 'retry') {
+                cancelRequested = false;
+                exportMode = 'full';
+                isRunning = true;
+                try { await downloadCollectedData(); } catch (_) {}
+            } else {
+                isRunning = false;
+                overlay.style.display = 'none';
+            }
         }
     });
 
