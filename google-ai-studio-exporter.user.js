@@ -2,7 +2,7 @@
 // @name         Google AI Studio Exporter
 // @name:zh-CN   Google AI Studio 对话导出器
 // @namespace    https://github.com/GhostXia/Google-AI-Studio-Exporter
-// @version      1.4.0
+// @version      1.4.1
 // @description  Export your Gemini chat history from Google AI Studio to a text file. Features: Auto-scrolling, User/Model role differentiation, clean output, and full mobile optimization.
 // @description:zh-CN 完美导出 Google AI Studio 对话记录。具备自动滚动加载、精准去重、防抖动、User/Model角色区分，以及全平台响应式优化。支持 PC、平板、手机全平台。
 // @author       GhostXia
@@ -422,17 +422,27 @@
         };
     }
 
-    function getDualCounts() {
-        const turns = turnOrder.length;
+    function computeCounts(order, map, includeUser = false) {
+        const turns = order.length;
         let paragraphs = 0;
-        for (const id of turnOrder) {
-            const item = collectedData.get(id);
+        for (const id of order) {
+            const item = map.get(id);
             if (!item) continue;
             if (item.role === ROLE_GEMINI && item.thoughts) paragraphs++;
             const textOut = (item.text || '').trim();
-            if (textOut.length > 0) paragraphs++;
+            if (textOut.length > 0) {
+                if (includeUser) {
+                    paragraphs++;
+                } else if (item.role !== ROLE_USER) {
+                    paragraphs++;
+                }
+            }
         }
         return { turns, paragraphs };
+    }
+
+    function getDualCounts() {
+        return computeCounts(turnOrder, collectedData, false);
     }
 
     function updateUI(state, msg = "") {
@@ -779,108 +789,35 @@
         });
     }
 
-    function updateTurnOrder(newIds) {
-        if (newIds.length === 0) return;
+    function findLastCommonIdx(newIds, oldOrder) {
+        for (let i = newIds.length - 1; i >= 0; i--) {
+            if (oldOrder.includes(newIds[i])) return i;
+        }
+        return -1;
+    }
 
-        // If turnOrder is empty, just assign
+    function mergeWithOverlap(oldOrder, newIds) {
+        const idx = findLastCommonIdx(newIds, oldOrder);
+        const toAdd = idx !== -1 ? newIds.slice(idx + 1) : newIds;
+        return [...oldOrder, ...toAdd];
+    }
+
+    function appendDisjointIds(oldOrder, newIds) {
+        return [...oldOrder, ...newIds];
+    }
+
+    function updateTurnOrder(newIds) {
+        if (!newIds || newIds.length === 0) return;
         if (turnOrder.length === 0) {
             turnOrder = [...newIds];
             return;
         }
-
-        // Try to find overlap
-        let firstNewId = newIds[0];
-        let lastNewId = newIds[newIds.length - 1];
-
-        let startIdxInOld = turnOrder.indexOf(firstNewId);
-        let endIdxInOld = turnOrder.indexOf(lastNewId);
-
-        if (startIdxInOld !== -1) {
-            // The start of the new list exists in the old list.
-            // We should merge from that point.
-            // Check if the new list extends beyond the old list
-            let oldSlice = turnOrder.slice(startIdxInOld);
-
-            // Simple merge: if new list is longer or contains new items after the overlap
-            // For robustness, we can just append items from newIds that are NOT in turnOrder yet,
-            // assuming they come AFTER the ones we found.
-            // But a safer way for scrolling down is:
-            // Find the last common item
-            let commonIdxNew = -1;
-            for (let i = newIds.length - 1; i >= 0; i--) {
-                if (turnOrder.includes(newIds[i])) {
-                    commonIdxNew = i;
-                    break;
-                }
-            }
-
-            if (commonIdxNew !== -1) {
-                // Append everything after the last common item
-                const newItems = newIds.slice(commonIdxNew + 1);
-                turnOrder.push(...newItems);
-            } else {
-                // Should not happen if startIdxInOld != -1, but just in case
-                turnOrder.push(...newIds);
-            }
-
+        const firstCommonIdx = newIds.findIndex(id => turnOrder.includes(id));
+        if (firstCommonIdx !== -1) {
+            turnOrder = mergeWithOverlap(turnOrder, newIds);
         } else {
-            // The start of the new list is NOT in the old list.
-            // This might happen if we jumped.
-            // If we are scrolling down, maybe the *end* of the old list overlaps with *start* of new list?
-            // (Already checked startIdxInOld).
-
-            // Check if any item in newIds exists in turnOrder
-            let firstCommonIdxNew = newIds.findIndex(id => turnOrder.includes(id));
-
-            if (firstCommonIdxNew !== -1) {
-                // We found a common item later in the new list.
-                // This implies we might have scrolled UP? or captured a middle chunk?
-                // For now, let's assume we are mostly scrolling down.
-                // If we find a common item, we merge.
-
-                // Actually, if we are scrolling down, we expect new items to be at the end.
-                // If we jumped, we might have a disjoint set.
-                // If disjoint, just append? Or try to insert?
-                // Given the scrolling logic (jump to top, then scroll down), we should mostly be appending.
-                // But if we jump to top, we reset turnOrder.
-
-                // Let's stick to a simple strategy:
-                // 1. Find the last item of turnOrder in newIds.
-                // 2. If found, append the rest of newIds after that item.
-                // 3. If not found, check if the first item of newIds is in turnOrder.
-                // 4. If not found, just append everything (assume it's next block).
-
-                // Refined strategy:
-                // We want to maintain a global order.
-                // If we see [A, B, C] and then [B, C, D], we want [A, B, C, D].
-
-                let lastCommonId = null;
-                let lastCommonIdxInNew = -1;
-
-                // Find the rightmost item in newIds that already exists in turnOrder
-                for (let i = newIds.length - 1; i >= 0; i--) {
-                    if (turnOrder.includes(newIds[i])) {
-                        lastCommonId = newIds[i];
-                        lastCommonIdxInNew = i;
-                        break;
-                    }
-                }
-
-                if (lastCommonIdxInNew !== -1) {
-                    // We have an overlap. Append everything after the overlap.
-                    const toAdd = newIds.slice(lastCommonIdxInNew + 1);
-                    turnOrder.push(...toAdd);
-                } else {
-                    // No overlap. Append all.
-                    turnOrder.push(...newIds);
-                }
-            } else {
-                // No overlap at all. Append.
-                turnOrder.push(...newIds);
-            }
+            turnOrder = appendDisjointIds(turnOrder, newIds);
         }
-
-        // Deduplicate just in case (though logic above should prevent it)
         turnOrder = [...new Set(turnOrder)];
     }
 
@@ -1040,7 +977,7 @@
                     if (nextItem.role === ROLE_USER) break;
                     if (nextItem.role === ROLE_GEMINI && nextItem.text) {
                         nextItem.thoughts = nextItem.thoughts
-                            ? (item.thoughts + '\n\n' + nextItem.thoughts)
+                            ? (nextItem.thoughts + '\n\n' + item.thoughts)
                             : item.thoughts;
                         collectedData.set(nextId, nextItem);
                         merged = true;
@@ -1061,15 +998,7 @@
     }
 
     function countParagraphs() {
-        let c = 0;
-        for (const id of turnOrder) {
-            const item = collectedData.get(id);
-            if (!item) continue;
-            if (item.role === ROLE_GEMINI && item.thoughts) c++;
-            const textOut = (item.text || '').trim();
-            if (textOut.length > 0) c++;
-        }
-        return c;
+        return computeCounts(turnOrder, collectedData, false).paragraphs;
     }
 
     // Helper: Download text-only mode
