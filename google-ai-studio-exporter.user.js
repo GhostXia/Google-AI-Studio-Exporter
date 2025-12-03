@@ -1345,9 +1345,30 @@
         // Generate final Markdown content
         const content = generateMarkdownContent(imgMap, fileMap);
 
-        // Create and download ZIP
         zip.file("chat_history.md", content);
-        const zipBlob = await zip.generateAsync({ type: "blob" });
+        let zipBlob;
+        try {
+            zipBlob = await Promise.race([
+                zip.generateAsync({ type: "blob" }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('ZIP timeout')), 15000))
+            ]);
+        } catch (e) {
+            const action = await showZipFallbackPrompt();
+            if (action === 'text') {
+                downloadTextOnly();
+                return true;
+            }
+            if (action === 'retry') {
+                try {
+                    zipBlob = await zip.generateAsync({ type: "blob" });
+                } catch (_) {
+                    downloadTextOnly();
+                    return true;
+                }
+            } else {
+                return false;
+            }
+        }
         cachedExportBlob = zipBlob;
         downloadBlob(zipBlob, `Gemini_Chat_v14_${Date.now()}.zip`);
 
@@ -1422,10 +1443,14 @@
 
     function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-    document.addEventListener('keydown', e => {
+    document.addEventListener('keydown', async e => {
         if (e.key === 'Escape' && isRunning) {
             cancelRequested = true;
-            endProcess("FINISHED");
+            isRunning = false;
+            normalizeConversation();
+            exportMode = 'text';
+            try { await downloadTextOnly(); } catch (_) {}
+            updateUI('FINISHED', collectedData.size);
         }
     });
 
