@@ -850,8 +850,10 @@
                 return t('role_thoughts');
             case ROLE_GEMINI:
                 return t('role_gemini');
-            default:
+            case ROLE_USER:
                 return t('role_user');
+            default:
+                return role; // 为未知的角色类型提供回退
         }
     }
 
