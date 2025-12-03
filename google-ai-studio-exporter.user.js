@@ -58,7 +58,11 @@
             'status_packaging_files': '正在打包 {n} 个文件...',
             'status_packaging_files_progress': '打包文件: {c}/{t}',
             'ui_turns': '回合数',
-            'ui_paragraphs': '输出段落数'
+            'ui_paragraphs': '输出段落数',
+            'title_zip_missing': 'JSZip 加载失败',
+            'status_zip_missing': '无法加载附件打包库。是否回退到纯文本？',
+            'btn_retry': '重试',
+            'btn_cancel': '取消'
         },
         'en': {
             'btn_export': '🚀 Export',
@@ -93,7 +97,11 @@
             'status_packaging_files': 'Packaging {n} files...',
             'status_packaging_files_progress': 'Packaging files: {c}/{t}',
             'ui_turns': 'Turns',
-            'ui_paragraphs': 'Output paragraphs'
+            'ui_paragraphs': 'Output paragraphs',
+            'title_zip_missing': 'JSZip load failed',
+            'status_zip_missing': 'Could not load ZIP library. Fallback to text?',
+            'btn_retry': 'Retry',
+            'btn_cancel': 'Cancel'
         }
     };
 
@@ -526,6 +534,45 @@
             createModeButton('ai-mode-close', t('btn_close'), false, () => {
                 overlay.style.display = 'none';
                 reject(new Error('Export cancelled by user.'));
+            });
+        });
+    }
+
+    function showZipFallbackPrompt() {
+        return new Promise((resolve) => {
+            initUI();
+            titleEl.innerText = t('title_zip_missing');
+            statusEl.innerHTML = t('status_zip_missing');
+            countEl.innerText = '';
+            const btnContainer = overlay.querySelector('.ai-btn-container');
+            const saveBtn = overlay.querySelector('#ai-save-btn');
+            const closeBtnEl = overlay.querySelector('#ai-close-btn');
+            if (saveBtn) saveBtn.style.display = 'none';
+            if (closeBtnEl) closeBtnEl.style.display = 'none';
+            btnContainer.style.display = 'flex';
+            btnContainer.querySelectorAll('.ai-mode-btn').forEach(btn => btn.remove());
+
+            const createModeButton = (id, text, isPrimary, onClick) => {
+                const btn = document.createElement('button');
+                btn.id = id;
+                btn.className = (isPrimary ? 'ai-btn' : 'ai-btn ai-btn-secondary') + ' ai-mode-btn';
+                btn.textContent = text;
+                btn.onclick = onClick;
+                btnContainer.appendChild(btn);
+            };
+
+            createModeButton('ai-fallback-text', t('btn_mode_text'), true, () => {
+                exportMode = 'text';
+                resolve('text');
+            });
+
+            createModeButton('ai-retry-zip', t('btn_retry'), false, () => {
+                resolve('retry');
+            });
+
+            createModeButton('ai-cancel', t('btn_cancel'), false, () => {
+                overlay.style.display = 'none';
+                resolve('cancel');
             });
         });
     }
@@ -1218,6 +1265,36 @@
         return content;
     }
 
+    async function ensureJSZip() {
+        if (typeof JSZip !== 'undefined') return JSZip;
+        const url = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+        if (typeof GM_xmlhttpRequest !== 'undefined') {
+            return new Promise((resolve, reject) => {
+                GM_xmlhttpRequest({
+                    method: 'GET',
+                    url,
+                    responseType: 'text',
+                    onload: (response) => {
+                        try {
+                            new Function(response.response)();
+                            resolve(JSZip);
+                        } catch (e) {
+                            reject(e);
+                        }
+                    },
+                    onerror: () => reject(new Error('JSZip load failed'))
+                });
+            });
+        }
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = url;
+            script.onload = () => resolve(JSZip);
+            script.onerror = () => reject(new Error('JSZip load failed'));
+            document.head.appendChild(script);
+        });
+    }
+
     // Main function: orchestrate the download process
     async function downloadCollectedData() {
         if (collectedData.size === 0) return false;
@@ -1231,6 +1308,21 @@
         }
 
         // Full mode with attachments
+        if (typeof JSZip === 'undefined') {
+            try { await ensureJSZip(); } catch (e) {}
+        }
+        while (typeof JSZip === 'undefined') {
+            const action = await showZipFallbackPrompt();
+            if (action === 'text') {
+                downloadTextOnly();
+                return true;
+            }
+            if (action === 'retry') {
+                try { await ensureJSZip(); } catch (e) {}
+                continue;
+            }
+            return false;
+        }
         const zip = new JSZip();
         const imgFolder = zip.folder("images");
         const fileFolder = zip.folder("files");
