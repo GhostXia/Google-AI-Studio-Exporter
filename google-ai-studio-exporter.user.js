@@ -696,25 +696,37 @@
 
     function captureData(scroller = document) {
         // Scope the query to the scroller container to avoid capturing elements from other parts of the page
-        const turns = scroller.querySelectorAll('ms-chat-turn');
+        const turns = scroller.querySelectorAll('ms-chat-turn, .chat-turn-container');
+
+        // Helper to derive a stable turn id from container or inner chunks
+        const getTurnId = (el) => {
+            if (el.id) return el.id;
+            const chunk = el.querySelector('ms-prompt-chunk[id], ms-response-chunk[id], ms-thought-chunk[id]');
+            return chunk ? chunk.id : null;
+        };
+
         // Update turn order based on visible turns
         const visibleTurnIds = Array.from(turns)
-            .filter(t => t.id && t.offsetParent !== null && window.getComputedStyle(t).visibility !== 'hidden')
-            .map(t => t.id);
+            .filter(t => t.offsetParent !== null && window.getComputedStyle(t).visibility !== 'hidden')
+            .map(t => getTurnId(t))
+            .filter(id => !!id);
         updateTurnOrder(visibleTurnIds);
 
         turns.forEach(turn => {
             // Check if the element is visible (offsetParent is null for hidden elements)
-            if (!turn.id || turn.offsetParent === null || window.getComputedStyle(turn).visibility === 'hidden') return;
+            if (turn.offsetParent === null || window.getComputedStyle(turn).visibility === 'hidden') return;
+
+            const turnId = getTurnId(turn);
+            if (!turnId) return;
 
             const role = (turn.querySelector('[data-turn-role="Model"]') || turn.querySelector('[class*="model-prompt-container"]')) ? ROLE_GEMINI : ROLE_USER;
-            const existing = collectedData.get(turn.id) || { role };
+            const existing = collectedData.get(turnId) || { role };
             const hasThoughtChunkNow = role === ROLE_GEMINI && !!turn.querySelector('ms-thought-chunk');
 
-            if (processedTurnIds.has(turn.id) && !(role === ROLE_GEMINI && !existing.thoughts && hasThoughtChunkNow)) return;
+            if (processedTurnIds.has(turnId) && !(role === ROLE_GEMINI && !existing.thoughts && hasThoughtChunkNow)) return;
 
             const clone = turn.cloneNode(true);
-            const trash = ['.actions-container', '.turn-footer', 'button', 'mat-icon', 'ms-grounding-sources', 'ms-search-entry-point'];
+            const trash = ['.actions-container', '.turn-footer', 'button', 'mat-icon', 'ms-grounding-sources', 'ms-search-entry-point', '[data-turn-role]', '.role-label', '.role', '.ms-role-tag', 'svg', '.author-label'];
             trash.forEach(s => clone.querySelectorAll(s).forEach(e => e.remove()));
 
             if (role === ROLE_GEMINI) {
@@ -734,9 +746,9 @@
             }
 
             if (existing.text || existing.thoughts) {
-                collectedData.set(turn.id, existing);
+                collectedData.set(turnId, existing);
                 if (role === ROLE_USER || (role === ROLE_GEMINI && !!existing.text)) {
-                    processedTurnIds.add(turn.id);
+                    processedTurnIds.add(turnId);
                 }
             }
         });
