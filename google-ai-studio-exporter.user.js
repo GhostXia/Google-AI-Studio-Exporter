@@ -349,6 +349,7 @@
     let isRunning = false;
     let hasFinished = false;
     let collectedData = new Map();
+    let processedTurnIds = new Set();
     let overlay, titleEl, statusEl, countEl, closeBtn;
     let exportMode = null; // 'full' or 'text'
     let cachedExportBlob = null;
@@ -501,6 +502,7 @@
         // isRunning = true; // Moved to after mode selection
         hasFinished = false;
         collectedData.clear();
+        processedTurnIds.clear();
         cachedExportBlob = null;
 
         // 显示模式选择
@@ -695,7 +697,7 @@
         const turns = scroller.querySelectorAll('ms-chat-turn');
         turns.forEach(turn => {
             // Check if the element is visible (offsetParent is null for hidden elements)
-            if (!turn.id || collectedData.has(turn.id) || turn.offsetParent === null || window.getComputedStyle(turn).visibility === 'hidden') return;
+            if (!turn.id || processedTurnIds.has(turn.id) || turn.offsetParent === null || window.getComputedStyle(turn).visibility === 'hidden') return;
 
             const role = (turn.querySelector('[data-turn-role="Model"]') || turn.querySelector('[class*="model-prompt-container"]')) ? ROLE_GEMINI : ROLE_USER;
 
@@ -703,20 +705,29 @@
             const trash = ['.actions-container', '.turn-footer', 'button', 'mat-icon', 'ms-grounding-sources', 'ms-search-entry-point'];
             trash.forEach(s => clone.querySelectorAll(s).forEach(e => e.remove()));
 
+            const existing = collectedData.get(turn.id) || { role };
+
             if (role === ROLE_GEMINI) {
                 const thoughtChunk = clone.querySelector('ms-thought-chunk');
                 if (thoughtChunk) {
                     const thoughtsText = cleanMarkdown(htmlToMarkdown(thoughtChunk));
                     thoughtChunk.remove();
-                    if (thoughtsText.length > 0) {
-                        collectedData.set(turn.id + '-thoughts', { role: ROLE_GEMINI_THOUGHTS, text: thoughtsText });
+                    if (thoughtsText.length > 0 && !existing.thoughts) {
+                        existing.thoughts = thoughtsText;
                     }
                 }
             }
 
             const text = cleanMarkdown(htmlToMarkdown(clone));
-            if (text.length > 0) {
-                collectedData.set(turn.id, { role, text });
+            if (text.length > 0 && !existing.text) {
+                existing.text = text;
+            }
+
+            if (existing.text || existing.thoughts) {
+                collectedData.set(turn.id, existing);
+                if (role === ROLE_USER || (role === ROLE_GEMINI && !!existing.text)) {
+                    processedTurnIds.add(turn.id);
+                }
             }
         });
     }
@@ -865,8 +876,12 @@
         content += "---\n\n";
 
         for (const [id, item] of collectedData) {
+            if (item.role === ROLE_GEMINI && item.thoughts) {
+                content += `## ${t('role_thoughts')}\n\n${item.thoughts}\n\n`;
+                content += `---\n\n`;
+            }
             const roleName = getRoleName(item.role);
-            content += `## ${roleName}\n\n${item.text}\n\n`;
+            content += `## ${roleName}\n\n${item.text || ''}\n\n`;
             content += `---\n\n`;
         }
 
@@ -999,10 +1014,29 @@
         content += "---\n\n";
 
         for (const [id, item] of collectedData) {
-            const roleName = getRoleName(item.role);
-            let processedText = item.text;
+            if (item.role === ROLE_GEMINI && item.thoughts) {
+                let processedThoughts = item.thoughts;
+                processedThoughts = processedThoughts.replace(IMG_REGEX, (match, alt, url, title) => {
+                    if (imgMap.has(url)) {
+                        const titleStr = title || '';
+                        return `![${alt}](${imgMap.get(url)}${titleStr})`;
+                    }
+                    return match;
+                });
+                processedThoughts = processedThoughts.replace(LINK_REGEX, (match, text, url, title) => {
+                    if (fileMap.has(url)) {
+                        const titleStr = title || '';
+                        return `[${text}](${fileMap.get(url)}${titleStr})`;
+                    }
+                    return match;
+                });
+                content += `## ${t('role_thoughts')}\n\n${processedThoughts}\n\n`;
+                content += `---\n\n`;
+            }
 
-            // Replace image URLs
+            const roleName = getRoleName(item.role);
+            let processedText = item.text || '';
+
             processedText = processedText.replace(IMG_REGEX, (match, alt, url, title) => {
                 if (imgMap.has(url)) {
                     const titleStr = title || '';
@@ -1010,8 +1044,6 @@
                 }
                 return match;
             });
-
-            // Replace file URLs
             processedText = processedText.replace(LINK_REGEX, (match, text, url, title) => {
                 if (fileMap.has(url)) {
                     const titleStr = title || '';
