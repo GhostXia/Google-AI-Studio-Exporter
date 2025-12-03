@@ -697,15 +697,17 @@
         const turns = scroller.querySelectorAll('ms-chat-turn');
         turns.forEach(turn => {
             // Check if the element is visible (offsetParent is null for hidden elements)
-            if (!turn.id || processedTurnIds.has(turn.id) || turn.offsetParent === null || window.getComputedStyle(turn).visibility === 'hidden') return;
+            if (!turn.id || turn.offsetParent === null || window.getComputedStyle(turn).visibility === 'hidden') return;
 
             const role = (turn.querySelector('[data-turn-role="Model"]') || turn.querySelector('[class*="model-prompt-container"]')) ? ROLE_GEMINI : ROLE_USER;
+            const existing = collectedData.get(turn.id) || { role };
+            const hasThoughtChunkNow = role === ROLE_GEMINI && !!turn.querySelector('ms-thought-chunk');
+
+            if (processedTurnIds.has(turn.id) && !(role === ROLE_GEMINI && !existing.thoughts && hasThoughtChunkNow)) return;
 
             const clone = turn.cloneNode(true);
             const trash = ['.actions-container', '.turn-footer', 'button', 'mat-icon', 'ms-grounding-sources', 'ms-search-entry-point'];
             trash.forEach(s => clone.querySelectorAll(s).forEach(e => e.remove()));
-
-            const existing = collectedData.get(turn.id) || { role };
 
             if (role === ROLE_GEMINI) {
                 const thoughtChunk = clone.querySelector('ms-thought-chunk');
@@ -881,8 +883,11 @@
                 content += `---\n\n`;
             }
             const roleName = getRoleName(item.role);
-            content += `## ${roleName}\n\n${item.text || ''}\n\n`;
-            content += `---\n\n`;
+            const textOut = (item.text || '').trim();
+            if (textOut.length > 0) {
+                content += `## ${roleName}\n\n${textOut}\n\n`;
+                content += `---\n\n`;
+            }
         }
 
         const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
@@ -924,7 +929,13 @@
     function collectImageUrls() {
         const uniqueUrls = new Set();
         for (const item of collectedData.values()) {
-            for (const match of item.text.matchAll(IMG_REGEX)) {
+            const text = item.text || '';
+            const thoughts = item.thoughts || '';
+
+            for (const match of text.matchAll(IMG_REGEX)) {
+                uniqueUrls.add(match[2]);
+            }
+            for (const match of thoughts.matchAll(IMG_REGEX)) {
                 uniqueUrls.add(match[2]);
             }
         }
@@ -961,10 +972,19 @@
         };
 
         for (const item of collectedData.values()) {
-            for (const match of item.text.matchAll(LINK_REGEX)) {
-                // Skip image-style markdown links: `![alt](url)`
-                if (match.index > 0 && item.text[match.index - 1] === '!') continue;
+            const text = item.text || '';
+            const thoughts = item.thoughts || '';
 
+            for (const match of text.matchAll(LINK_REGEX)) {
+                // Skip image-style markdown links: `![alt](url)`
+                if (match.index > 0 && text[match.index - 1] === '!') continue;
+
+                if (fileFilter(match)) {
+                    uniqueUrls.add(match[2]);
+                }
+            }
+            for (const match of thoughts.matchAll(LINK_REGEX)) {
+                if (match.index > 0 && thoughts[match.index - 1] === '!') continue;
                 if (fileFilter(match)) {
                     uniqueUrls.add(match[2]);
                 }
