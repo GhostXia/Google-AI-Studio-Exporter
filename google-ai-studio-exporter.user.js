@@ -726,7 +726,7 @@
             if (processedTurnIds.has(turnId) && !(role === ROLE_GEMINI && !existing.thoughts && hasThoughtChunkNow)) return;
 
             const clone = turn.cloneNode(true);
-            const trash = ['.actions-container', '.turn-footer', 'button', 'mat-icon', 'ms-grounding-sources', 'ms-search-entry-point', '[data-turn-role]', '.role-label', '.role', '.ms-role-tag', 'svg', '.author-label'];
+            const trash = ['.actions-container', '.turn-footer', 'button', 'mat-icon', 'ms-grounding-sources', 'ms-search-entry-point', '.role-label', '.ms-role-tag', 'svg', '.author-label'];
             trash.forEach(s => clone.querySelectorAll(s).forEach(e => e.remove()));
 
             if (role === ROLE_GEMINI) {
