@@ -37,6 +37,15 @@ A powerful **UserScript** that exports your complete **Google AI Studio** chat h
   - Updates markdown links to point to local resources
   - Organized folder structure: `images/`, `files/`, and `chat_history.md`
 
+#### 🧩 Conversation Structure & Thoughts
+- **Order**: `User → Thoughts → Gemini` per turn
+- **Thoughts Preservation**: Model thoughts are exported in full (no cleanup)
+- **Chronological Merge**: Consecutive thoughts-only turns are merged into the following Gemini text in chronological order
+
+#### 🔢 Dual Counters (UI & Header)
+- **Turns**: Total visible conversation turns
+- **Output paragraphs**: Total of Thoughts + Gemini paragraphs (excludes User by default)
+
 #### 🎨 Rich Markdown Support
 - **Complete HTML-to-Markdown Conversion**:
   - Code blocks with syntax highlighting
@@ -66,6 +75,7 @@ A powerful **UserScript** that exports your complete **Google AI Studio** chat h
 - **English** and **简体中文** (Simplified Chinese)
 - Automatic language detection based on browser settings
 - All UI elements, messages, and file headers are localized
+ - New keys for dual counters: `Turns`, `Output paragraphs` in both languages
 
 ### 📁 Project Structure
 
@@ -165,7 +175,9 @@ Google-AI-Studio-Exporter/
 
 **Time:** 2025/11/27 19:00:00
 
-**Count:** 42
+**Turns:** 16
+
+**Output paragraphs:** 24
 
 ---
 
@@ -338,7 +350,19 @@ You can download the full dataset: [data.csv](files/1_data.csv)
 The `Stable Version/` folder contains proven releases:
 - Each file is named by version number (e.g., `1.3.5.user.js`)
 - Main script (`google-ai-studio-exporter.user.js`) is the latest development version
-- Current version: **1.3.6**
+- Current version: **1.4.0**
+
+#### Changelog
+
+##### 1.4.0
+- Conversation order standardized: `User → Thoughts → Gemini`
+- Full thoughts preserved; no automatic cleanup
+- Consecutive thoughts-only turns merged chronologically into next Gemini text
+- Dual counters added (UI + headers): `Turns`, `Output paragraphs`
+- Unified i18n keys for dual counters in EN/ZH
+- UI overlay count style refined for readability on all screens
+- Stabilized capture: only `ms-chat-turn`, improved deduplication
+- Refactored `updateTurnOrder` into helper functions for maintainability
 
 #### Contributing
 
@@ -507,7 +531,9 @@ Google-AI-Studio-Exporter/
 
 **时间：** 2025/11/27 19:00:00
 
-**条数：** 42
+**回合数：** 16
+
+**输出段落数：** 24
 
 ---
 
@@ -680,7 +706,19 @@ Gemini_Chat_v14_1732704000000.zip
 `Stable Version/` 文件夹包含经过验证的版本：
 - 每个文件以版本号命名（例如 `1.3.5.user.js`）
 - 主脚本（`google-ai-studio-exporter.user.js`）是最新开发版本
-- 当前版本：**1.3.6**
+- 当前版本：**1.4.0**
+
+#### 变更日志
+
+##### 1.4.0
+- 会话顺序规范：每组为 `User → 思考 → Gemini`
+- 思考完整保留：不进行自动清理
+- 连续“仅思考”合并：按时间顺序合并到后续 Gemini 正文
+- 双计数（UI 与文件头）：`回合数`、`输出段落数`
+- i18n 新增双计数键：中英均支持
+- 覆盖层计数样式优化：所有屏幕更易读
+- 采集稳定：仅采集 `ms-chat-turn`，并完善去重
+- 重构 `updateTurnOrder` 为帮助函数，便于维护
 
 #### 贡献
 
