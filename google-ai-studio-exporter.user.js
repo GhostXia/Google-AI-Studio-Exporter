@@ -165,11 +165,12 @@
         }
         
         .ai-count { 
-            font-size: 48px; 
-            font-weight: 700; 
-            color: #1a73e8; 
-            margin: 16px 0;
-            font-variant-numeric: tabular-nums;
+            font-size: 14px; 
+            font-weight: 600; 
+            color: #5f6368; 
+            margin-top: 8px;
+            line-height: 1.6;
+            white-space: pre-line;
         }
         
         .ai-btn-container {
@@ -263,7 +264,7 @@
                 padding: 28px;
             }
             .ai-title { font-size: 22px; }
-            .ai-count { font-size: 40px; }
+            .ai-count { font-size: 14px; }
         }
 
         /* ========================================== */
@@ -303,8 +304,8 @@
             }
             
             .ai-count { 
-                font-size: 40px;
-                margin: 12px 0;
+                font-size: 14px;
+                margin-top: 8px;
             }
             
             .ai-btn {
@@ -332,7 +333,7 @@
             }
             
             .ai-title { font-size: 18px; }
-            .ai-count { font-size: 36px; }
+            .ai-count { font-size: 13px; }
             .ai-status { font-size: 13px; }
         }
 
@@ -347,6 +348,7 @@
             }
             .ai-title { color: #e8eaed; }
             .ai-status { color: #9aa0a6; }
+            .ai-count { color: #9aa0a6; }
         }
     `;
     document.head.appendChild(style);
