@@ -24,7 +24,7 @@
     // 0. 国际化 (i18n)
     // ==========================================
     const lang = navigator.language.startsWith('zh') ? 'zh' : 'en';
-    const translations = {
+        const translations = {
         'zh': {
             'btn_export': '🚀 导出',
             'title_ready': '准备就绪',
@@ -45,6 +45,8 @@
             'file_header': 'Google AI Studio 完整对话记录',
             'file_time': '时间',
             'file_count': '条数',
+            'file_turns': '回合数',
+            'file_paragraphs': '输出段落数',
             'role_user': 'User',
             'role_gemini': 'Gemini',
             'role_thoughts': '思考',
@@ -54,7 +56,9 @@
             'status_packaging_images': '正在打包 {n} 张图片...',
             'status_packaging_images_progress': '打包图片: {c}/{t}',
             'status_packaging_files': '正在打包 {n} 个文件...',
-            'status_packaging_files_progress': '打包文件: {c}/{t}'
+            'status_packaging_files_progress': '打包文件: {c}/{t}',
+            'ui_turns': '回合数',
+            'ui_paragraphs': '输出段落数'
         },
         'en': {
             'btn_export': '🚀 Export',
@@ -76,6 +80,8 @@
             'file_header': 'Google AI Studio Chat History',
             'file_time': 'Time',
             'file_count': 'Count',
+            'file_turns': 'Turns',
+            'file_paragraphs': 'Output paragraphs',
             'role_user': 'User',
             'role_gemini': 'Gemini',
             'role_thoughts': 'Thoughts',
@@ -85,7 +91,9 @@
             'status_packaging_images': 'Packaging {n} images...',
             'status_packaging_images_progress': 'Packaging images: {c}/{t}',
             'status_packaging_files': 'Packaging {n} files...',
-            'status_packaging_files_progress': 'Packaging files: {c}/{t}'
+            'status_packaging_files_progress': 'Packaging files: {c}/{t}',
+            'ui_turns': 'Turns',
+            'ui_paragraphs': 'Output paragraphs'
         }
     };
 
@@ -412,6 +420,19 @@
         };
     }
 
+    function getDualCounts() {
+        const turns = turnOrder.length;
+        let paragraphs = 0;
+        for (const id of turnOrder) {
+            const item = collectedData.get(id);
+            if (!item) continue;
+            if (item.role === ROLE_GEMINI && item.thoughts) paragraphs++;
+            const textOut = (item.text || '').trim();
+            if (textOut.length > 0) paragraphs++;
+        }
+        return { turns, paragraphs };
+    }
+
     function updateUI(state, msg = "") {
         initUI();
         const saveBtn = overlay.querySelector('#ai-save-btn');
@@ -428,7 +449,8 @@
             titleEl.innerText = t('title_scrolling');
             statusEl.innerHTML = t('status_scrolling');
             countEl.style.display = 'block';
-            countEl.innerText = msg;
+            const { turns, paragraphs } = getDualCounts();
+            countEl.innerText = `${t('ui_turns')}: ${turns}\n${t('ui_paragraphs')}: ${paragraphs}`;
         } else if (state === 'PACKAGING') {
             titleEl.innerText = t('title_scrolling');
             // In PACKAGING state, the status message (msg) already contains the count (e.g., "Packaging 5 images...").
@@ -438,7 +460,8 @@
         } else if (state === 'FINISHED') {
             titleEl.innerText = t('title_finished');
             statusEl.innerHTML = t('status_finished');
-            countEl.innerText = msg;
+            const { turns, paragraphs } = getDualCounts();
+            countEl.innerText = `${t('ui_turns')}: ${turns}\n${t('ui_paragraphs')}: ${paragraphs}`;
             btnContainer.style.display = 'flex';
             saveBtn.style.display = 'inline-block';
             closeBtn.style.display = 'inline-block';
@@ -1035,11 +1058,24 @@
         collectedData = newMap;
     }
 
+    function countParagraphs() {
+        let c = 0;
+        for (const id of turnOrder) {
+            const item = collectedData.get(id);
+            if (!item) continue;
+            if (item.role === ROLE_GEMINI && item.thoughts) c++;
+            const textOut = (item.text || '').trim();
+            if (textOut.length > 0) c++;
+        }
+        return c;
+    }
+
     // Helper: Download text-only mode
     function downloadTextOnly() {
-        let content = `# ${t('file_header')}\n\n`;
-        content += `**${t('file_time')}:** ${new Date().toLocaleString()}\n\n`;
-        content += `**${t('file_count')}:** ${collectedData.size}\n\n`;
+        let content = `# ${t('file_header')}`+"\n\n";
+        content += `**${t('file_time')}:** ${new Date().toLocaleString()}`+"\n\n";
+        content += `**${t('file_turns')}:** ${turnOrder.length}`+"\n\n";
+        content += `**${t('file_paragraphs')}:** ${countParagraphs()}`+"\n\n";
         content += "---\n\n";
 
         for (const id of turnOrder) {
@@ -1195,9 +1231,10 @@
 
     // Helper: Generate Markdown content with URL replacements
     function generateMarkdownContent(imgMap, fileMap) {
-        let content = `# ${t('file_header')}\n\n`;
-        content += `**${t('file_time')}:** ${new Date().toLocaleString()}\n\n`;
-        content += `**${t('file_count')}:** ${collectedData.size}\n\n`;
+        let content = `# ${t('file_header')}`+"\n\n";
+        content += `**${t('file_time')}:** ${new Date().toLocaleString()}`+"\n\n";
+        content += `**${t('file_turns')}:** ${turnOrder.length}`+"\n\n";
+        content += `**${t('file_paragraphs')}:** ${countParagraphs()}`+"\n\n";
         content += "---\n\n";
 
         for (const id of turnOrder) {
