@@ -372,6 +372,7 @@
     let overlay, titleEl, statusEl, countEl, closeBtn;
     let exportMode = null; // 'full' or 'text'
     let cachedExportBlob = null;
+    let cancelRequested = false;
 
     // ==========================================
     // 3. UI 逻辑
@@ -464,7 +465,8 @@
         if (state === 'COUNTDOWN') {
             titleEl.innerText = t('title_countdown');
             statusEl.innerHTML = t('status_countdown', msg);
-            countEl.innerText = "0";
+            countEl.style.display = 'none';
+            countEl.innerText = '';
         } else if (state === 'SCROLLING') {
             titleEl.innerText = t('title_scrolling');
             statusEl.innerHTML = t('status_scrolling');
@@ -588,6 +590,7 @@
         turnOrder = [];
         processedTurnIds.clear();
         cachedExportBlob = null;
+        cancelRequested = false;
 
         // 显示模式选择
         try {
@@ -1085,6 +1088,7 @@
             let completedCount = 0;
 
             const promises = Array.from(uniqueUrls).map(async (url, index) => {
+                if (cancelRequested) return;
                 try {
                     const blob = await fetchResource(url);
                     if (blob) {
@@ -1101,7 +1105,12 @@
                 }
             });
 
-            await Promise.all(promises);
+            const cancelWatcher = new Promise(resolve => {
+                const timer = setInterval(() => {
+                    if (cancelRequested) { clearInterval(timer); resolve(); }
+                }, 200);
+            });
+            await Promise.race([Promise.all(promises), cancelWatcher]);
         }
         return resourceMap;
     }
@@ -1346,7 +1355,12 @@
     }
 
     function fetchResource(url) {
+        const timeoutMs = 10000;
         return new Promise((resolve) => {
+            let settled = false;
+            const timeout = setTimeout(() => { if (!settled) { settled = true; resolve(null); } }, timeoutMs);
+            const finish = (val) => { if (!settled) { settled = true; clearTimeout(timeout); resolve(val); } };
+
             if (typeof GM_xmlhttpRequest !== 'undefined') {
                 GM_xmlhttpRequest({
                     method: "GET",
@@ -1354,13 +1368,13 @@
                     responseType: "blob",
                     onload: (response) => {
                         if (response.status >= 200 && response.status < 300) {
-                            resolve(response.response);
+                            finish(response.response);
                         } else {
                             console.warn(`Resource fetch failed with status ${response.status}:`, url);
-                            resolve(null);
+                            finish(null);
                         }
                     },
-                    onerror: () => resolve(null)
+                    onerror: () => finish(null)
                 });
             } else {
                 fetch(url)
@@ -1368,8 +1382,8 @@
                         if (r.ok) return r.blob();
                         return null;
                     })
-                    .then(resolve)
-                    .catch(() => resolve(null));
+                    .then(finish)
+                    .catch(() => finish(null));
             }
         });
     }
@@ -1410,6 +1424,7 @@
 
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape' && isRunning) {
+            cancelRequested = true;
             endProcess("FINISHED");
         }
     });
