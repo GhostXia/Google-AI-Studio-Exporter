@@ -1055,7 +1055,7 @@
             }
 
             const roleName = getRoleName(item.role);
-            let processedText = item.text || '';
+            let processedText = (item.text || '').trim();
 
             processedText = processedText.replace(IMG_REGEX, (match, alt, url, title) => {
                 if (imgMap.has(url)) {
@@ -1072,8 +1072,10 @@
                 return match;
             });
 
-            content += `## ${roleName}\n\n${processedText}\n\n`;
-            content += `---\n\n`;
+            if (processedText.length > 0) {
+                content += `## ${roleName}\n\n${processedText}\n\n`;
+                content += `---\n\n`;
+            }
         }
 
         return content;
