@@ -995,6 +995,46 @@
         }
     }
 
+    // Normalize: merge consecutive Gemini-thoughts-only into next Gemini text within the same segment
+    function normalizeConversation() {
+        if (turnOrder.length === 0 || collectedData.size === 0) return;
+        const newOrder = [];
+        const newMap = new Map();
+
+        for (let i = 0; i < turnOrder.length; i++) {
+            const id = turnOrder[i];
+            const item = collectedData.get(id);
+            if (!item) continue;
+
+            if (item.role === ROLE_GEMINI && item.thoughts && !item.text) {
+                let merged = false;
+                for (let j = i + 1; j < turnOrder.length; j++) {
+                    const nextId = turnOrder[j];
+                    const nextItem = collectedData.get(nextId);
+                    if (!nextItem) continue;
+                    if (nextItem.role === ROLE_USER) break;
+                    if (nextItem.role === ROLE_GEMINI && nextItem.text) {
+                        nextItem.thoughts = nextItem.thoughts
+                            ? (item.thoughts + '\n\n' + nextItem.thoughts)
+                            : item.thoughts;
+                        collectedData.set(nextId, nextItem);
+                        merged = true;
+                        break;
+                    }
+                }
+                if (merged) {
+                    continue; // skip adding this thoughts-only entry
+                }
+            }
+
+            newOrder.push(id);
+            newMap.set(id, item);
+        }
+
+        turnOrder = newOrder;
+        collectedData = newMap;
+    }
+
     // Helper: Download text-only mode
     function downloadTextOnly() {
         let content = `# ${t('file_header')}\n\n`;
@@ -1213,6 +1253,8 @@
     // Main function: orchestrate the download process
     async function downloadCollectedData() {
         if (collectedData.size === 0) return false;
+        // Normalize conversation before exporting (affects both modes)
+        normalizeConversation();
 
         // Text-only mode
         if (exportMode === 'text') {
