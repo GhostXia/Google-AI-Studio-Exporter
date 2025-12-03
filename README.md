@@ -343,6 +343,20 @@ You can download the full dataset: [data.csv](files/1_data.csv)
   - GitHub (upload and view online)
 - **Full Mode**: Extract the `.zip` file and open `chat_history.md`
 
+### ⚠️ Known Issues & Fallback for Attachments
+
+- In some environments, `JSZip` may fail to load (e.g., userscript manager not supporting `@require`, CDN blocked), leading to “JSZip is not defined” or a stalled ZIP phase.
+- Image/file requests can hang due to network or CORS, leaving the UI at “Packaging images: x/y”.
+- Fallback and retry (since 1.4.2):
+  - During packaging, the UI shows “Press ESC to cancel and choose how to save”.
+  - Press `ESC` to choose: `📄 Text Only`, `Retry attachments`, `Cancel`.
+  - ZIP generation exceeding 15s triggers a prompt to fallback or retry.
+- Recommendations & troubleshooting:
+  - If failures persist, prefer `📄 Text Only` to ensure export succeeds.
+  - Allow access to `https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js`, or enable `@require` in your userscript manager.
+  - For restricted/offline environments, host a local mirror or manually inject `JSZip 3.10.1`.
+  - Single resource downloads have a 10s timeout; failed items are skipped so the process continues.
+
 ### 🛠️ Development
 
 #### Version History
@@ -698,6 +712,21 @@ Gemini_Chat_v14_1732704000000.zip
   - [VS Code](https://code.visualstudio.com/)
   - GitHub（上传并在线查看）
 - **完整模式**：解压 `.zip` 文件并打开 `chat_history.md`
+
+### ⚠️ 附件下载已知问题与回退
+
+- 部分环境可能无法加载 `JSZip`（如脚本管理器不支持 `@require`、CDN 被阻断），会出现“JSZip is not defined”或压缩阶段停滞。
+- 图片/文件请求可能因网络或 CORS 长时间无响应，界面停在“打包图片: x/y”。
+- 回退与重试（1.4.2 起）：
+  - 打包阶段界面会显示“按 ESC 可取消并选择保存方式”。
+  - 按 `ESC` 将弹出选择：`📄 纯文本`、`重试附件打包`、`取消`。
+  - 压缩超过 15 秒会弹出“是否回退到纯文本/重试/取消”的提示。
+- 建议与排障：
+  - 若频繁失败，优先选择 `📄 纯文本` 保存，确保导出成功。
+  - 允许访问 `https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js`，或在脚本管理器启用对 `@require` 的支持。
+  - 受限/离线环境可自建镜像或自行注入 `JSZip 3.10.1`。
+- 单个资源下载默认 10 秒超时，失败将跳过以继续流程。
+
 
 ### 🛠️ 开发
 
