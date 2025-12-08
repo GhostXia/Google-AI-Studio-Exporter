@@ -2,7 +2,7 @@
 // @name         Google AI Studio Exporter
 // @name:zh-CN   Google AI Studio 对话导出器
 // @namespace    https://github.com/GhostXia/Google-AI-Studio-Exporter
-// @version      1.4.4
+// @version      1.4.5
 // @description  Export your Gemini chat history from Google AI Studio to a text file. Features: Auto-scrolling, User/Model role differentiation, clean output, and full mobile optimization.
 // @description:zh-CN 完美导出 Google AI Studio 对话记录。具备自动滚动加载、精准去重、防抖动、User/Model角色区分，以及全平台响应式优化。支持 PC、平板、手机全平台。
 // @author       GhostXia
@@ -15,6 +15,7 @@
 // @updateURL    https://github.com/GhostXia/Google-AI-Studio-Exporter/raw/main/google-ai-studio-exporter.user.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js
 // @grant        GM_xmlhttpRequest
+// @grant        unsafeWindow
 // ==/UserScript==
 
 (function () {
@@ -1323,13 +1324,29 @@
         return content;
     }
 
+    // 获取 JSZip：优先从沙盒获取，然后从页面上下文（unsafeWindow）获取
+    // Get JSZip: prefer sandbox, then page context (unsafeWindow)
+    function getJSZip() {
+        // 1. 检查沙盒中的 JSZip（@require 加载的）
+        if (typeof JSZip !== 'undefined') {
+            return JSZip;
+        }
+        // 2. 检查页面上下文（通过 script 标签注入的）
+        if (typeof unsafeWindow !== 'undefined' && typeof unsafeWindow.JSZip !== 'undefined') {
+            return unsafeWindow.JSZip;
+        }
+        return null;
+    }
+
     // 加载 JSZip 的备用方案（通过 blob URL 注入脚本绕过 CSP）
     // Fallback loader for JSZip (inject script via blob URL to bypass CSP)
     async function ensureJSZip() {
-        if (typeof JSZip !== 'undefined') return JSZip;
+        const existing = getJSZip();
+        if (existing) return existing;
+
         const url = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
 
-        // 方法1：通过 GM_xmlhttpRequest 获取脚本内容，然后用 blob URL 注入
+        // 方法1：通过 GM_xmlhttpRequest 获取脚本内容，然后用 blob URL 注入到页面
         if (typeof GM_xmlhttpRequest !== 'undefined') {
             return new Promise((resolve, reject) => {
                 GM_xmlhttpRequest({
@@ -1343,8 +1360,10 @@
                             script.src = blobUrl;
                             script.onload = () => {
                                 URL.revokeObjectURL(blobUrl);
-                                if (typeof JSZip !== 'undefined') {
-                                    resolve(JSZip);
+                                // 脚本在页面上下文执行，检查 unsafeWindow
+                                const loaded = getJSZip();
+                                if (loaded) {
+                                    resolve(loaded);
                                 } else {
                                     reject(new Error('JSZip not defined after load'));
                                 }
@@ -1372,8 +1391,9 @@
             const script = document.createElement('script');
             script.src = url;
             script.onload = () => {
-                if (typeof JSZip !== 'undefined') {
-                    resolve(JSZip);
+                const loaded = getJSZip();
+                if (loaded) {
+                    resolve(loaded);
                 } else {
                     reject(new Error('JSZip not defined after load'));
                 }
@@ -1398,22 +1418,23 @@
         }
 
         // Full mode with attachments
-        if (typeof JSZip === 'undefined') {
-            try { await ensureJSZip(); } catch (e) { console.error('ensureJSZip failed:', e); }
+        let JSZipLib = getJSZip();
+        if (!JSZipLib) {
+            try { JSZipLib = await ensureJSZip(); } catch (e) { console.error('ensureJSZip failed:', e); }
         }
-        while (typeof JSZip === 'undefined') {
+        while (!JSZipLib) {
             const action = await showZipFallbackPrompt();
             if (action === 'text') {
                 downloadTextOnly();
                 return true;
             }
             if (action === 'retry') {
-                try { await ensureJSZip(); } catch (e) { console.error('ensureJSZip retry failed:', e); }
+                try { JSZipLib = await ensureJSZip(); } catch (e) { console.error('ensureJSZip retry failed:', e); }
                 continue;
             }
             return false;
         }
-        const zip = new JSZip();
+        const zip = new JSZipLib();
         const imgFolder = zip.folder("images");
         const fileFolder = zip.folder("files");
 
