@@ -2,7 +2,7 @@
 // @name         Google AI Studio Exporter
 // @name:zh-CN   Google AI Studio 对话导出器
 // @namespace    https://github.com/GhostXia/Google-AI-Studio-Exporter
-// @version      1.4.3
+// @version      1.4.4
 // @description  Export your Gemini chat history from Google AI Studio to a text file. Features: Auto-scrolling, User/Model role differentiation, clean output, and full mobile optimization.
 // @description:zh-CN 完美导出 Google AI Studio 对话记录。具备自动滚动加载、精准去重、防抖动、User/Model角色区分，以及全平台响应式优化。支持 PC、平板、手机全平台。
 // @author       GhostXia
@@ -1323,33 +1323,61 @@
         return content;
     }
 
-    // 加载 JSZip 的备用方案（GM_xmlhttpRequest 或注入 CDN 脚本）
-    // Fallback loader for JSZip (GM_xmlhttpRequest or inject CDN script)
+    // 加载 JSZip 的备用方案（通过 blob URL 注入脚本绕过 CSP）
+    // Fallback loader for JSZip (inject script via blob URL to bypass CSP)
     async function ensureJSZip() {
         if (typeof JSZip !== 'undefined') return JSZip;
         const url = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+
+        // 方法1：通过 GM_xmlhttpRequest 获取脚本内容，然后用 blob URL 注入
         if (typeof GM_xmlhttpRequest !== 'undefined') {
             return new Promise((resolve, reject) => {
                 GM_xmlhttpRequest({
                     method: 'GET',
                     url,
-                    responseType: 'text',
+                    responseType: 'blob',
                     onload: (response) => {
                         try {
-                            new Function(response.response)();
-                            resolve(JSZip);
+                            const blobUrl = URL.createObjectURL(response.response);
+                            const script = document.createElement('script');
+                            script.src = blobUrl;
+                            script.onload = () => {
+                                URL.revokeObjectURL(blobUrl);
+                                if (typeof JSZip !== 'undefined') {
+                                    resolve(JSZip);
+                                } else {
+                                    reject(new Error('JSZip not defined after load'));
+                                }
+                            };
+                            script.onerror = () => {
+                                URL.revokeObjectURL(blobUrl);
+                                reject(new Error('JSZip script load failed'));
+                            };
+                            document.head.appendChild(script);
                         } catch (e) {
+                            console.error('JSZip injection error:', e);
                             reject(e);
                         }
                     },
-                    onerror: () => reject(new Error('JSZip load failed'))
+                    onerror: (err) => {
+                        console.error('GM_xmlhttpRequest failed:', err);
+                        reject(new Error('JSZip download failed'));
+                    }
                 });
             });
         }
+
+        // 方法2：直接通过 script 标签加载（某些环境可能被 CSP 阻止）
         return new Promise((resolve, reject) => {
             const script = document.createElement('script');
             script.src = url;
-            script.onload = () => resolve(JSZip);
+            script.onload = () => {
+                if (typeof JSZip !== 'undefined') {
+                    resolve(JSZip);
+                } else {
+                    reject(new Error('JSZip not defined after load'));
+                }
+            };
             script.onerror = () => reject(new Error('JSZip load failed'));
             document.head.appendChild(script);
         });
@@ -1371,7 +1399,7 @@
 
         // Full mode with attachments
         if (typeof JSZip === 'undefined') {
-            try { await ensureJSZip(); } catch (e) { }
+            try { await ensureJSZip(); } catch (e) { console.error('ensureJSZip failed:', e); }
         }
         while (typeof JSZip === 'undefined') {
             const action = await showZipFallbackPrompt();
@@ -1380,7 +1408,7 @@
                 return true;
             }
             if (action === 'retry') {
-                try { await ensureJSZip(); } catch (e) { }
+                try { await ensureJSZip(); } catch (e) { console.error('ensureJSZip retry failed:', e); }
                 continue;
             }
             return false;
@@ -1524,3 +1552,4 @@
 
     setInterval(createEntryButton, 2000);
 })();
+
