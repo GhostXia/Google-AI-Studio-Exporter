@@ -24,7 +24,7 @@
     // 0. 国际化 (i18n)
     // ==========================================
     const lang = navigator.language.startsWith('zh') ? 'zh' : 'en';
-        const translations = {
+    const translations = {
         'zh': {
             'btn_export': '🚀 导出',
             'title_ready': '准备就绪',
@@ -1100,10 +1100,10 @@
     // 仅文本导出：生成 Markdown 并下载
     // Text-only export: generate Markdown and download
     function downloadTextOnly() {
-        let content = `# ${t('file_header')}`+"\n\n";
-        content += `**${t('file_time')}:** ${new Date().toLocaleString()}`+"\n\n";
-        content += `**${t('file_turns')}:** ${turnOrder.length}`+"\n\n";
-        content += `**${t('file_paragraphs')}:** ${countParagraphs()}`+"\n\n";
+        let content = `# ${t('file_header')}` + "\n\n";
+        content += `**${t('file_time')}:** ${new Date().toLocaleString()}` + "\n\n";
+        content += `**${t('file_turns')}:** ${turnOrder.length}` + "\n\n";
+        content += `**${t('file_paragraphs')}:** ${countParagraphs()}` + "\n\n";
         content += "---\n\n";
 
         for (const id of turnOrder) {
@@ -1267,10 +1267,10 @@
 
     // Helper: Generate Markdown content with URL replacements
     function generateMarkdownContent(imgMap, fileMap) {
-        let content = `# ${t('file_header')}`+"\n\n";
-        content += `**${t('file_time')}:** ${new Date().toLocaleString()}`+"\n\n";
-        content += `**${t('file_turns')}:** ${turnOrder.length}`+"\n\n";
-        content += `**${t('file_paragraphs')}:** ${countParagraphs()}`+"\n\n";
+        let content = `# ${t('file_header')}` + "\n\n";
+        content += `**${t('file_time')}:** ${new Date().toLocaleString()}` + "\n\n";
+        content += `**${t('file_turns')}:** ${turnOrder.length}` + "\n\n";
+        content += `**${t('file_paragraphs')}:** ${countParagraphs()}` + "\n\n";
         content += "---\n\n";
 
         for (const id of turnOrder) {
@@ -1371,7 +1371,7 @@
 
         // Full mode with attachments
         if (typeof JSZip === 'undefined') {
-            try { await ensureJSZip(); } catch (e) {}
+            try { await ensureJSZip(); } catch (e) { }
         }
         while (typeof JSZip === 'undefined') {
             const action = await showZipFallbackPrompt();
@@ -1380,7 +1380,7 @@
                 return true;
             }
             if (action === 'retry') {
-                try { await ensureJSZip(); } catch (e) {}
+                try { await ensureJSZip(); } catch (e) { }
                 continue;
             }
             return false;
@@ -1453,7 +1453,7 @@
                     onerror: () => finish(null)
                 });
             } else {
-                fetch(url)
+                fetch(url, { credentials: 'include' })
                     .then(r => {
                         if (r.ok) return r.blob();
                         return null;
@@ -1507,14 +1507,14 @@
             if (choice === 'text') {
                 normalizeConversation();
                 exportMode = 'text';
-                try { await downloadTextOnly(); } catch (_) {}
+                try { await downloadTextOnly(); } catch (_) { }
                 updateUI('FINISHED', collectedData.size);
                 isRunning = false;
             } else if (choice === 'retry') {
                 cancelRequested = false;
                 exportMode = 'full';
                 isRunning = true;
-                try { await downloadCollectedData(); } catch (_) {}
+                try { await downloadCollectedData(); } catch (_) { }
             } else {
                 isRunning = false;
                 overlay.style.display = 'none';
