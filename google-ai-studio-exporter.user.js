@@ -18,8 +18,18 @@
 // @grant        unsafeWindow
 // ==/UserScript==
 
+// 在 IIFE 外部捕获 @require 加载的 JSZip（避免沙盒作用域问题）
+/* global JSZip */
+const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
+
 (function () {
     'use strict';
+
+    // 调试日志
+    console.log('[AI Studio Exporter] Script started');
+    console.log('[AI Studio Exporter] _JSZipRef:', _JSZipRef);
+    console.log('[AI Studio Exporter] typeof JSZip:', typeof JSZip);
+    console.log('[AI Studio Exporter] unsafeWindow.JSZip:', typeof unsafeWindow !== 'undefined' ? unsafeWindow.JSZip : 'unsafeWindow not available');
 
     // ==========================================
     // 0. 国际化 (i18n)
@@ -1324,16 +1334,24 @@
         return content;
     }
 
-    // 获取 JSZip：优先从沙盒获取，然后从页面上下文（unsafeWindow）获取
-    // Get JSZip: prefer sandbox, then page context (unsafeWindow)
+    // 获取 JSZip：优先使用 IIFE 外部捕获的引用
+    // Get JSZip: prefer the reference captured outside IIFE
     function getJSZip() {
-        // 1. 检查沙盒中的 JSZip（@require 加载的）
+        // 1. 使用 IIFE 外部捕获的引用（@require 加载的）
+        if (_JSZipRef) {
+            return _JSZipRef;
+        }
+        // 2. 检查当前作用域中的 JSZip
         if (typeof JSZip !== 'undefined') {
             return JSZip;
         }
-        // 2. 检查页面上下文（通过 script 标签注入的）
+        // 3. 检查页面上下文（通过 script 标签注入的）
         if (typeof unsafeWindow !== 'undefined' && typeof unsafeWindow.JSZip !== 'undefined') {
             return unsafeWindow.JSZip;
+        }
+        // 4. 检查 window 对象
+        if (typeof window !== 'undefined' && typeof window.JSZip !== 'undefined') {
+            return window.JSZip;
         }
         return null;
     }
