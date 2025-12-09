@@ -396,6 +396,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     const EMBED_JSZIP_BASE64 = '';
     const JSZIP_URLS = [
         'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
+        'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.js',
         'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js',
         'https://unpkg.com/jszip@3.10.1/dist/jszip.min.js'
     ];
