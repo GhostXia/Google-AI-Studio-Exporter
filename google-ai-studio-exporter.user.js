@@ -2,7 +2,7 @@
 // @name         Google AI Studio Exporter
 // @name:zh-CN   Google AI Studio 对话导出器
 // @namespace    https://github.com/GhostXia/Google-AI-Studio-Exporter
-// @version      1.4.5
+// @version      1.4.6
 // @description  Export your Gemini chat history from Google AI Studio to a text file. Features: Auto-scrolling, User/Model role differentiation, clean output, and full mobile optimization.
 // @description:zh-CN 完美导出 Google AI Studio 对话记录。具备自动滚动加载、精准去重、防抖动、User/Model角色区分，以及全平台响应式优化。支持 PC、平板、手机全平台。
 // @author       GhostXia
@@ -16,6 +16,9 @@
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js
 // @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
+// @connect      cdnjs.cloudflare.com
+// @connect      cdn.jsdelivr.net
+// @connect      unpkg.com
 // ==/UserScript==
 
 // 在 IIFE 外部捕获 @require 加载的 JSZip（避免沙盒作用域问题）
@@ -390,6 +393,12 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     let exportMode = null; // 'full' or 'text'
     let cachedExportBlob = null;
     let cancelRequested = false;
+    const EMBED_JSZIP_BASE64 = '';
+    const JSZIP_URLS = [
+        'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
+        'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js',
+        'https://unpkg.com/jszip@3.10.1/dist/jszip.min.js'
+    ];
 
     // ==========================================
     // 3. UI 逻辑
@@ -1362,63 +1371,66 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         const existing = getJSZip();
         if (existing) return existing;
 
-        const url = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
-
-        // 方法1：通过 GM_xmlhttpRequest 获取脚本内容，然后用 blob URL 注入到页面
-        if (typeof GM_xmlhttpRequest !== 'undefined') {
-            return new Promise((resolve, reject) => {
-                GM_xmlhttpRequest({
-                    method: 'GET',
-                    url,
-                    responseType: 'blob',
-                    onload: (response) => {
-                        try {
-                            const blobUrl = URL.createObjectURL(response.response);
-                            const script = document.createElement('script');
-                            script.src = blobUrl;
-                            script.onload = () => {
-                                URL.revokeObjectURL(blobUrl);
-                                // 脚本在页面上下文执行，检查 unsafeWindow
-                                const loaded = getJSZip();
-                                if (loaded) {
-                                    resolve(loaded);
-                                } else {
-                                    reject(new Error('JSZip not defined after load'));
-                                }
-                            };
-                            script.onerror = () => {
-                                URL.revokeObjectURL(blobUrl);
-                                reject(new Error('JSZip script load failed'));
-                            };
-                            document.head.appendChild(script);
-                        } catch (e) {
-                            console.error('JSZip injection error:', e);
-                            reject(e);
-                        }
-                    },
-                    onerror: (err) => {
-                        console.error('GM_xmlhttpRequest failed:', err);
-                        reject(new Error('JSZip download failed'));
-                    }
-                });
-            });
+        // 方法0：优先尝试内嵌的 JSZip Base64（无需网络）
+        if (EMBED_JSZIP_BASE64 && EMBED_JSZIP_BASE64.length > 0) {
+            try {
+                const code = atob(EMBED_JSZIP_BASE64);
+                new Function(code)();
+                const embedded = getJSZip();
+                if (embedded) return embedded;
+            } catch (_) {}
         }
 
-        // 方法2：直接通过 script 标签加载（某些环境可能被 CSP 阻止）
-        return new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = url;
-            script.onload = () => {
-                const loaded = getJSZip();
-                if (loaded) {
-                    resolve(loaded);
-                } else {
-                    reject(new Error('JSZip not defined after load'));
-                }
-            };
-            script.onerror = () => reject(new Error('JSZip load failed'));
-            document.head.appendChild(script);
-        });
+        // GM 注入：依次尝试多 CDN
+        if (typeof GM_xmlhttpRequest !== 'undefined') {
+            for (const url of JSZIP_URLS) {
+                try {
+                    /* eslint-disable no-await-in-loop */
+                    const lib = await new Promise((resolve, reject) => {
+                        GM_xmlhttpRequest({
+                            method: 'GET',
+                            url,
+                            responseType: 'blob',
+                            onload: (response) => {
+                                try {
+                                    const blobUrl = URL.createObjectURL(response.response);
+                                    const script = document.createElement('script');
+                                    script.src = blobUrl;
+                                    script.onload = () => {
+                                        URL.revokeObjectURL(blobUrl);
+                                        const loaded = getJSZip();
+                                        loaded ? resolve(loaded) : reject(new Error('JSZip not defined after load'));
+                                    };
+                                    script.onerror = () => { URL.revokeObjectURL(blobUrl); reject(new Error('JSZip script load failed')); };
+                                    document.head.appendChild(script);
+                                } catch (e) { reject(e); }
+                            },
+                            onerror: () => reject(new Error('JSZip download failed'))
+                        });
+                    });
+                    if (lib) return lib;
+                } catch (_) {}
+            }
+        }
+
+        // script 注入：依次尝试多 CDN
+        for (const url of JSZIP_URLS) {
+            try {
+                /* eslint-disable no-await-in-loop */
+                const lib = await new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = url;
+                    script.onload = () => {
+                        const loaded = getJSZip();
+                        loaded ? resolve(loaded) : reject(new Error('JSZip not defined after load'));
+                    };
+                    script.onerror = () => reject(new Error('JSZip load failed'));
+                    document.head.appendChild(script);
+                });
+                if (lib) return lib;
+            } catch (_) {}
+        }
+        throw new Error('All JSZip CDN attempts failed');
     }
 
     // Main function: orchestrate the download process
