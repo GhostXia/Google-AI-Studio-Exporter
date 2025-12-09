@@ -384,21 +384,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             .ai-status { color: #9aa0a6; }
             .ai-count { color: #9aa0a6; }
         }
-        .ai-log {
-            margin-top: 10px;
-            padding: 8px 10px;
-            background: rgba(245, 245, 245, 0.7);
-            border-radius: 8px;
-            max-height: 220px;
-            overflow-y: auto;
-            font-size: 12px;
-            line-height: 1.4;
-            text-align: left;
-            word-break: break-word;
-            white-space: pre-wrap;
-        }
-        .ai-log-entry { margin: 2px 0; }
-        .ai-log-error { color: #d93025; font-weight: 700; }
+        
     `;
     document.head.appendChild(style);
 
@@ -410,7 +396,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     let collectedData = new Map();
     let turnOrder = []; // Array to store turn IDs in the correct order
     let processedTurnIds = new Set();
-    let overlay, titleEl, statusEl, countEl, closeBtn, logEl;
+    let overlay, titleEl, statusEl, countEl, closeBtn;
     let exportMode = null; // 'full' or 'text'
     let cachedExportBlob = null;
     let cancelRequested = false;
@@ -447,7 +433,6 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                 <div class="ai-title">${t('title_ready')}</div>
                 <div class="ai-status">${t('status_init')}</div>
                 <div class="ai-count">0</div>
-                <div id="ai-log" class="ai-log"></div>
                 <div class="ai-btn-container">
                     <button id="ai-save-btn" class="ai-btn">${t('btn_save')}</button>
                     <button id="ai-close-btn" class="ai-btn ai-btn-secondary">${t('btn_close')}</button>
@@ -459,7 +444,6 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         titleEl = overlay.querySelector('.ai-title');
         statusEl = overlay.querySelector('.ai-status');
         countEl = overlay.querySelector('.ai-count');
-        logEl = overlay.querySelector('#ai-log');
         closeBtn = overlay.querySelector('#ai-close-btn');
         const saveBtn = overlay.querySelector('#ai-save-btn');
 
@@ -597,16 +581,13 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     function debugLog(message, level = 'info') {
         try {
             if (!overlay) initUI();
-            const box = logEl || (overlay && overlay.querySelector('#ai-log'));
-            if (!box) return;
+            if (!statusEl) return;
             const line = document.createElement('div');
-            line.className = 'ai-log-entry' + (level === 'error' ? ' ai-log-error' : '');
-            line.textContent = message;
-            box.appendChild(line);
-            box.scrollTop = box.scrollHeight;
-            if (level === 'error' && statusEl) {
-                statusEl.innerHTML = `<span class="ai-red">${message}</span>`;
+            if (level === 'error') {
+                line.className = 'ai-red';
             }
+            line.textContent = message;
+            statusEl.appendChild(line);
         } catch (_) {}
     }
 
@@ -705,6 +686,8 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         processedTurnIds.clear();
         cachedExportBlob = null;
         cancelRequested = false;
+
+        autoFixFormFieldAttributes();
 
         // 显示模式选择
         try {
@@ -861,6 +844,20 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         }
 
         endProcess("FINISHED");
+    }
+
+    function autoFixFormFieldAttributes() {
+        try {
+            const fields = document.querySelectorAll(
+                'input[autocomplete]:not([name]), textarea[autocomplete]:not([name]), select[autocomplete]:not([name])'
+            );
+            let i = 0;
+            fields.forEach(el => {
+                const nm = 'ai_exporter_field_' + (i++);
+                el.setAttribute('name', nm);
+            });
+            if (fields.length > 0) debugLog('Auto-assigned name for ' + fields.length + ' form fields');
+        } catch (_) {}
     }
 
     // ==========================================
