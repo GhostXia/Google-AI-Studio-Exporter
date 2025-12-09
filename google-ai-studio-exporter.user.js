@@ -2,7 +2,7 @@
 // @name         Google AI Studio Exporter
 // @name:zh-CN   Google AI Studio 对话导出器
 // @namespace    https://github.com/GhostXia/Google-AI-Studio-Exporter
-// @version      1.4.6
+// @version      1.4.7
 // @description  Export your Gemini chat history from Google AI Studio to a text file. Features: Auto-scrolling, User/Model role differentiation, clean output, and full mobile optimization.
 // @description:zh-CN 完美导出 Google AI Studio 对话记录。具备自动滚动加载、精准去重、防抖动、User/Model角色区分，以及全平台响应式优化。支持 PC、平板、手机全平台。
 // @author       GhostXia
@@ -19,6 +19,10 @@
 // @connect      cdnjs.cloudflare.com
 // @connect      cdn.jsdelivr.net
 // @connect      unpkg.com
+// @connect      lh3.googleusercontent.com
+// @connect      googleusercontent.com
+// @connect      storage.googleapis.com
+// @connect      gstatic.com
 // ==/UserScript==
 
 // 在 IIFE 外部捕获 @require 加载的 JSZip（避免沙盒作用域问题）
@@ -378,6 +382,18 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             .ai-status { color: #9aa0a6; }
             .ai-count { color: #9aa0a6; }
         }
+        .ai-log {
+            margin-top: 10px;
+            padding: 8px 10px;
+            background: rgba(245, 245, 245, 0.7);
+            border-radius: 8px;
+            max-height: 160px;
+            overflow-y: auto;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        .ai-log-entry { margin: 2px 0; }
+        .ai-log-error { color: #d93025; font-weight: 700; }
     `;
     document.head.appendChild(style);
 
@@ -389,7 +405,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     let collectedData = new Map();
     let turnOrder = []; // Array to store turn IDs in the correct order
     let processedTurnIds = new Set();
-    let overlay, titleEl, statusEl, countEl, closeBtn;
+    let overlay, titleEl, statusEl, countEl, closeBtn, logEl;
     let exportMode = null; // 'full' or 'text'
     let cachedExportBlob = null;
     let cancelRequested = false;
@@ -426,6 +442,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                 <div class="ai-title">${t('title_ready')}</div>
                 <div class="ai-status">${t('status_init')}</div>
                 <div class="ai-count">0</div>
+                <div id="ai-log" class="ai-log"></div>
                 <div class="ai-btn-container">
                     <button id="ai-save-btn" class="ai-btn">${t('btn_save')}</button>
                     <button id="ai-close-btn" class="ai-btn ai-btn-secondary">${t('btn_close')}</button>
@@ -437,6 +454,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         titleEl = overlay.querySelector('.ai-title');
         statusEl = overlay.querySelector('.ai-status');
         countEl = overlay.querySelector('.ai-count');
+        logEl = overlay.querySelector('#ai-log');
         closeBtn = overlay.querySelector('#ai-close-btn');
         const saveBtn = overlay.querySelector('#ai-save-btn');
 
@@ -453,6 +471,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                 }
             } catch (err) {
                 console.error("Failed to re-download file:", err);
+                debugLog((t('err_runtime') + (err && err.message ? err.message : '')), 'error');
                 updateUI('ERROR', t('err_runtime') + err.message);
             }
         };
@@ -517,6 +536,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         } else if (state === 'ERROR') {
             titleEl.innerText = t('title_error');
             statusEl.innerHTML = `<span class="ai-red">${msg}</span>`;
+            debugLog(msg, 'error');
             btnContainer.style.display = 'flex';
             closeBtn.style.display = 'inline-block';
         }
@@ -568,6 +588,28 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             });
         });
     }
+
+    function debugLog(message, level = 'info') {
+        try {
+            if (!overlay) initUI();
+            const box = logEl || (overlay && overlay.querySelector('#ai-log'));
+            if (!box) return;
+            const line = document.createElement('div');
+            line.className = 'ai-log-entry' + (level === 'error' ? ' ai-log-error' : '');
+            line.textContent = message;
+            box.appendChild(line);
+            box.scrollTop = box.scrollHeight;
+        } catch (_) {}
+    }
+
+    window.addEventListener('error', (e) => {
+        const msg = e && e.message ? e.message : 'Script error';
+        debugLog(msg, 'error');
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+        const reason = e && e.reason ? (e.reason.message || String(e.reason)) : 'Unhandled rejection';
+        debugLog(reason, 'error');
+    });
 
     // 当 ZIP 库不可用时的回退提示（纯文本/重试/取消）
     // Fallback prompt when ZIP library is unavailable (text/retry/cancel)
@@ -1372,13 +1414,26 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         const existing = getJSZip();
         if (existing) return existing;
 
-        // 方法0：优先尝试内嵌的 JSZip Base64（无需网络）
+        // 方法0：优先尝试内嵌的 JSZip Base64（无需网络，避免 unsafe-eval）
         if (EMBED_JSZIP_BASE64 && EMBED_JSZIP_BASE64.length > 0) {
             try {
-                const code = atob(EMBED_JSZIP_BASE64);
-                new Function(code)();
-                const embedded = getJSZip();
-                if (embedded) return embedded;
+                const binary = atob(EMBED_JSZIP_BASE64);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                const blob = new Blob([bytes], { type: 'application/javascript' });
+                const blobUrl = URL.createObjectURL(blob);
+                const script = document.createElement('script');
+                script.src = blobUrl;
+                const embeddedLib = await new Promise((resolve, reject) => {
+                    script.onload = () => {
+                        URL.revokeObjectURL(blobUrl);
+                        const loaded = getJSZip();
+                        loaded ? resolve(loaded) : reject(new Error('JSZip not defined after embedded load'));
+                    };
+                    script.onerror = () => { URL.revokeObjectURL(blobUrl); reject(new Error('Embedded JSZip script load failed')); };
+                    document.head.appendChild(script);
+                });
+                if (embeddedLib) return embeddedLib;
             } catch (_) {}
         }
 
@@ -1410,7 +1465,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                         });
                     });
                     if (lib) return lib;
-                } catch (_) {}
+                } catch (e) { debugLog('JSZip load failed: ' + url + ' (' + (e && e.message ? e.message : 'error') + ')', 'error'); }
             }
         }
 
@@ -1429,8 +1484,9 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                     document.head.appendChild(script);
                 });
                 if (lib) return lib;
-            } catch (_) {}
+            } catch (e) { debugLog('JSZip script injection failed: ' + url + ' (' + (e && e.message ? e.message : 'error') + ')', 'error'); }
         }
+        debugLog('All JSZip CDN attempts failed', 'error');
         throw new Error('All JSZip CDN attempts failed');
     }
 
@@ -1451,7 +1507,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         // Full mode with attachments
         let JSZipLib = getJSZip();
         if (!JSZipLib) {
-            try { JSZipLib = await ensureJSZip(); } catch (e) { console.error('ensureJSZip failed:', e); }
+            try { JSZipLib = await ensureJSZip(); } catch (e) { console.error('ensureJSZip failed:', e); debugLog('ensureJSZip failed: ' + (e && e.message ? e.message : 'error'), 'error'); }
         }
         while (!JSZipLib) {
             const action = await showZipFallbackPrompt();
