@@ -401,6 +401,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     let cachedExportBlob = null;
     let cancelRequested = false;
     const EMBED_JSZIP_BASE64 = '';
+    const DISABLE_SCRIPT_INJECTION = true;
     const JSZIP_URLS = [
         'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
         'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.js',
@@ -1420,27 +1421,9 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         const existing = getJSZip();
         if (existing) return existing;
 
-        // 方法0：优先尝试内嵌的 JSZip Base64（无需网络，避免 unsafe-eval）
-        if (EMBED_JSZIP_BASE64 && EMBED_JSZIP_BASE64.length > 0) {
-            try {
-                const binary = atob(EMBED_JSZIP_BASE64);
-                const bytes = new Uint8Array(binary.length);
-                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-                const blob = new Blob([bytes], { type: 'application/javascript' });
-                const blobUrl = URL.createObjectURL(blob);
-                const script = document.createElement('script');
-                script.src = blobUrl;
-                const embeddedLib = await new Promise((resolve, reject) => {
-                    script.onload = () => {
-                        URL.revokeObjectURL(blobUrl);
-                        const loaded = getJSZip();
-                        loaded ? resolve(loaded) : reject(new Error('JSZip not defined after embedded load'));
-                    };
-                    script.onerror = () => { URL.revokeObjectURL(blobUrl); reject(new Error('Embedded JSZip script load failed')); };
-                    document.head.appendChild(script);
-                });
-                if (embeddedLib) return embeddedLib;
-            } catch (_) {}
+        if (DISABLE_SCRIPT_INJECTION) {
+            debugLog('Script injection disabled due to CSP. Use @require or choose text-only.', 'error');
+            return null;
         }
 
         // GM 注入：依次尝试多 CDN
