@@ -1210,6 +1210,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                     }
                 } catch (e) {
                     console.error(`${config.subDir} download failed:`, url, e);
+                    debugLog(`${config.subDir} download failed: ${url} (${e && e.message ? e.message : 'error'})`, 'error');
                 }
                 completedCount++;
                 if (completedCount % 5 === 0 || completedCount === uniqueUrls.size) {
@@ -1570,7 +1571,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         const timeoutMs = 10000;
         return new Promise((resolve) => {
             let settled = false;
-            const timeout = setTimeout(() => { if (!settled) { settled = true; resolve(null); } }, timeoutMs);
+            const timeout = setTimeout(() => { if (!settled) { settled = true; debugLog(`Resource fetch timed out: ${url}`, 'error'); resolve(null); } }, timeoutMs);
             const finish = (val) => { if (!settled) { settled = true; clearTimeout(timeout); resolve(val); } };
 
             if (typeof GM_xmlhttpRequest !== 'undefined') {
@@ -1583,19 +1584,21 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                             finish(response.response);
                         } else {
                             console.warn(`Resource fetch failed with status ${response.status}:`, url);
+                            debugLog(`Resource fetch failed (${response.status}): ${url}`, 'error');
                             finish(null);
                         }
                     },
-                    onerror: () => finish(null)
+                    onerror: () => { debugLog(`Resource fetch network error: ${url}`, 'error'); finish(null); }
                 });
             } else {
                 fetch(url, { credentials: 'include' })
                     .then(r => {
                         if (r.ok) return r.blob();
+                        debugLog(`Fetch failed (${r.status}): ${url}`, 'error');
                         return null;
                     })
                     .then(finish)
-                    .catch(() => finish(null));
+                    .catch(() => { debugLog(`Fetch error: ${url}`, 'error'); finish(null); });
             }
         });
     }
