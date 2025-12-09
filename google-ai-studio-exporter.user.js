@@ -2,7 +2,7 @@
 // @name         Google AI Studio Exporter
 // @name:zh-CN   Google AI Studio 对话导出器
 // @namespace    https://github.com/GhostXia/Google-AI-Studio-Exporter
-// @version      1.4.7
+// @version      1.4.8
 // @description  Export your Gemini chat history from Google AI Studio to a text file. Features: Auto-scrolling, User/Model role differentiation, clean output, and full mobile optimization.
 // @description:zh-CN 完美导出 Google AI Studio 对话记录。具备自动滚动加载、精准去重、防抖动、User/Model角色区分，以及全平台响应式优化。支持 PC、平板、手机全平台。
 // @author       GhostXia
@@ -169,8 +169,8 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             padding: 32px; 
             border-radius: 20px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            width: 90%; 
-            max-width: 480px;
+            width: 92%; 
+            max-width: 560px;
             text-align: center; 
             position: relative;
             animation: ai-slide-up 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -194,6 +194,8 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             margin-bottom: 24px; 
             line-height: 1.7; 
             color: #5f6368; 
+            word-break: break-word; 
+            white-space: pre-wrap;
         }
         
         .ai-count { 
@@ -387,10 +389,13 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             padding: 8px 10px;
             background: rgba(245, 245, 245, 0.7);
             border-radius: 8px;
-            max-height: 160px;
+            max-height: 220px;
             overflow-y: auto;
             font-size: 12px;
             line-height: 1.4;
+            text-align: left;
+            word-break: break-word;
+            white-space: pre-wrap;
         }
         .ai-log-entry { margin: 2px 0; }
         .ai-log-error { color: #d93025; font-weight: 700; }
@@ -599,6 +604,9 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             line.textContent = message;
             box.appendChild(line);
             box.scrollTop = box.scrollHeight;
+            if (level === 'error' && statusEl) {
+                statusEl.innerHTML = `<span class="ai-red">${message}</span>`;
+            }
         } catch (_) {}
     }
 
