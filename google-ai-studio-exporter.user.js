@@ -81,10 +81,10 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             'status_zip_missing': '无法加载附件打包库。是否回退到纯文本？',
             'btn_retry': '重试',
             'btn_cancel': '取消',
-                'status_esc_hint': '按 <b>ESC</b> 可取消并选择保存方式',
-                'title_cancel': '已取消导出',
-                'status_cancel': '请选择继续打包附件或改为纯文本保存',
-                'banner_top': '📎 附件已合并为 Markdown 链接（纯文本导出）'
+            'status_esc_hint': '按 <b>ESC</b> 可取消并选择保存方式',
+            'title_cancel': '已取消导出',
+            'status_cancel': '请选择继续打包附件或改为纯文本保存',
+            'banner_top': '📎 附件已合并为 Markdown 链接（纯文本导出）'
             },
             'en': {
                 'btn_export': '🚀 Export',
