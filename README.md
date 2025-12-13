@@ -123,10 +123,6 @@ Here is the analysis of the code...
 
 ---
 
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=GhostXia/Google-AI-Studio-Exporter&type=date&legend=top-left)](https://www.star-history.com/#GhostXia/Google-AI-Studio-Exporter&type=date&legend=top-left)
-
 ## 📜 License
 
 AGPL-3.0 License
@@ -199,3 +195,9 @@ AGPL-3.0 License
 - 增强链接规范化与域名校验，避免伪造域名误判。
 - 在导出开始时重置扫描状态，避免跳过已扫描回合。
 - 改进文件名提取，支持查询参数回退并统一解码。
+
+---
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=GhostXia/Google-AI-Studio-Exporter&type=date&legend=top-left)](https://www.star-history.com/#GhostXia/Google-AI-Studio-Exporter&type=date&legend=top-left)
