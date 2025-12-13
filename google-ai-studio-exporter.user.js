@@ -2,7 +2,7 @@
 // @name         Google AI Studio Exporter
 // @name:zh-CN   Google AI Studio 对话导出器
 // @namespace    https://github.com/GhostXia/Google-AI-Studio-Exporter
-// @version      1.4.8
+// @version      1.5.0
 // @description  Export your Gemini chat history from Google AI Studio to a text file. Features: Auto-scrolling, User/Model role differentiation, clean output, and full mobile optimization.
 // @description:zh-CN 完美导出 Google AI Studio 对话记录。具备自动滚动加载、精准去重、防抖动、User/Model角色区分，以及全平台响应式优化。支持 PC、平板、手机全平台。
 // @author       GhostXia
@@ -85,7 +85,9 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             'status_esc_hint': '按 <b>ESC</b> 可取消并选择保存方式',
             'title_cancel': '已取消导出',
             'status_cancel': '请选择继续打包附件或改为纯文本保存',
-            'banner_top': '📎 附件已合并为 Markdown 链接（纯文本导出）'
+            'banner_top': '📎 附件已合并为 Markdown 链接（纯文本导出）',
+            'attachments_section': '附件',
+            'attachments_link_unavailable': '链接不可用'
             },
             'en': {
                 'btn_export': '🚀 Export',
@@ -128,7 +130,9 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             'status_esc_hint': 'Press <b>ESC</b> to cancel and choose how to save',
             'title_cancel': 'Export cancelled',
             'status_cancel': 'Choose to continue attachments or save as text',
-            'banner_top': '📎 Attachments merged as Markdown links (Text-only export)'
+            'banner_top': '📎 Attachments merged as Markdown links (Text-only export)',
+            'attachments_section': 'Attachments',
+            'attachments_link_unavailable': 'link unavailable'
             }
         };
 
@@ -424,6 +428,10 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     let isHandlingEscape = false;
     const EMBED_JSZIP_BASE64 = '';
     const DISABLE_SCRIPT_INJECTION = true;
+    const ATTACHMENT_COMBINED_FALLBACK = true;
+    const ATTACHMENT_MAX_DIST = 160;
+    const scannedAttachmentTurns = new Set();
+    const ATTACHMENT_SCAN_CONCURRENCY = 3;
     const JSZIP_URLS = [
         'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
         'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.js',
@@ -511,6 +519,16 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
 
     function getDualCounts() {
         return computeCounts(turnOrder, collectedData, false);
+    }
+
+    function resetExportState() {
+        collectedData.clear();
+        turnOrder = [];
+        processedTurnIds.clear();
+        scannedAttachmentTurns.clear();
+        cachedExportBlob = null;
+        cancelRequested = false;
+        hasFinished = false;
     }
 
     // 更新遮罩界面状态（支持多种流程状态）
@@ -709,13 +727,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     // Main export flow: mode select → countdown → capture → export
     async function startProcess() {
         if (isRunning) return;
-        // isRunning = true; // Moved to after mode selection
-        hasFinished = false;
-        collectedData.clear();
-        turnOrder = [];
-        processedTurnIds.clear();
-        cachedExportBlob = null;
-        cancelRequested = false;
+        resetExportState();
 
         autoFixFormFieldAttributes();
 
@@ -847,7 +859,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
 
         try {
             while (isRunning) {
-                captureData(scroller);
+                await captureData(scroller);
                 updateUI('SCROLLING', collectedData.size);
 
                 scroller.scrollBy({ top: window.innerHeight * 0.7, behavior: 'smooth' });
@@ -916,11 +928,71 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                 return el;
             }
             el = el.parentElement;
-        }
-        return document.documentElement;
     }
+    return document.documentElement;
+}
 
-    function captureData(scroller = document) {
+function normalizeHref(href) {
+    try {
+        const raw = String(href || '').trim();
+        if (!raw || raw === '#') return '';
+        const u = new URL(raw, window.location.href);
+        return u.href;
+    } catch (_) {
+        return '';
+    }
+}
+
+function filterHref(href) {
+        if (!href) return false;
+        const lower = href.toLowerCase();
+        if (lower.startsWith('http:') || lower.startsWith('https:')) return true;
+        if (ATTACHMENT_COMBINED_FALLBACK && lower.startsWith('blob:')) return true;
+        return false;
+}
+
+function extractDownloadLinksFromTurn(el) {
+    const links = [];
+    const isDownloadish = (href, a) => {
+        if (!href) return false;
+        const h = href.toLowerCase();
+        const hasDownloadAttr = !!(a && a.getAttribute('download'));
+        const tokenMatch = h.includes('/download') || h.includes('download=true') || h.includes('/dl/');
+        const extMatch = /(\.zip|\.pdf|\.png|\.jpe?g|\.gif|\.webp|\.mp4|\.mov|\.tgz|\.tar\.gz|\.exe|\.rar|\.7z|\.csv|\.txt|\.json|\.md|\.xlsx|\.docx)(?:$|[?#])/i.test(h);
+        let hostMatch = false;
+        try {
+            const u = new URL(href, window.location.href);
+            const host = u.hostname.toLowerCase();
+            hostMatch = [
+                's3.amazonaws.com',
+                'googleapis.com',
+                'storage.googleapis.com',
+                'drive.google.com',
+                'blob.core.windows.net',
+                'googleusercontent.com'
+            ].some(domain => host === domain || host.endsWith('.' + domain));
+        } catch (_) {}
+        const schemeMatch = h.startsWith('blob:') || h.startsWith('data:');
+        return hasDownloadAttr || tokenMatch || extMatch || hostMatch || schemeMatch;
+    };
+    const icons = el.querySelectorAll('span.material-symbols-outlined, span.ms-button-icon-symbol');
+    icons.forEach(sp => {
+        const txt = (sp.textContent || '').trim().toLowerCase();
+        if (txt === 'download' || txt === '下载') {
+            const a = sp.closest('a') || sp.parentElement?.querySelector('a[href]');
+            const href = normalizeHref(a?.getAttribute('href') || '');
+            if (filterHref(href)) links.push(href);
+        }
+    });
+    const anchors = el.querySelectorAll('a[href]');
+    anchors.forEach(a => {
+        const href = normalizeHref(a.getAttribute('href') || '');
+        if (isDownloadish(href, a) && filterHref(href)) links.push(href);
+    });
+    return Array.from(new Set(links));
+}
+
+    async function captureData(scroller = document) {
         // Scope the query to the scroller container to avoid capturing elements from other parts of the page
         const turns = scroller.querySelectorAll('ms-chat-turn');
 
@@ -938,18 +1010,60 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             .filter(id => !!id)));
         updateTurnOrder(visibleTurnIds);
 
-        turns.forEach(turn => {
+        for (const turn of turns) {
             // Check if the element is visible (offsetParent is null for hidden elements)
-            if (turn.offsetParent === null || window.getComputedStyle(turn).visibility === 'hidden') return;
+            if (turn.offsetParent === null || window.getComputedStyle(turn).visibility === 'hidden') continue;
 
             const turnId = getTurnId(turn);
-            if (!turnId) return;
+            if (!turnId) continue;
 
             const role = (turn.querySelector('[data-turn-role="Model"]') || turn.querySelector('[class*="model-prompt-container"]')) ? ROLE_GEMINI : ROLE_USER;
             const existing = collectedData.get(turnId) || { role };
             const hasThoughtChunkNow = role === ROLE_GEMINI && !!turn.querySelector('ms-thought-chunk');
 
-            if (processedTurnIds.has(turnId) && !(role === ROLE_GEMINI && !existing.thoughts && hasThoughtChunkNow)) return;
+            if (processedTurnIds.has(turnId) && !(role === ROLE_GEMINI && !existing.thoughts && hasThoughtChunkNow)) continue;
+
+            // Extract download links from the original turn before stripping UI-only elements
+            let dlLinks = extractDownloadLinksFromTurn(turn);
+            if (dlLinks.length > 0) {
+                const prev = existing.attachments || [];
+                existing.attachments = Array.from(new Set([...prev, ...dlLinks]));
+            }
+
+            if ((!existing.attachments || existing.attachments.length === 0) && !scannedAttachmentTurns.has(turnId)) {
+                const imgs = Array.from(turn.querySelectorAll('img'));
+                const found = [];
+                existing.attachmentScanAttempted = true;
+                const scanImg = async (img) => {
+                    const r1 = img.getBoundingClientRect();
+                    img.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+                    img.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+                    await sleep(80);
+                    const spans = turn.querySelectorAll('span.material-symbols-outlined, span.ms-button-icon-symbol');
+                    spans.forEach(sp => {
+                        const txt = (sp.textContent || '').trim().toLowerCase();
+                        if (txt !== 'download' && txt !== '下载') return;
+                        const a = sp.closest('a') || sp.parentElement?.querySelector('a[href]');
+                        if (a) {
+                            const r2 = a.getBoundingClientRect();
+                            const cx1 = (r1.left + r1.right) / 2, cy1 = (r1.top + r1.bottom) / 2;
+                            const cx2 = (r2.left + r2.right) / 2, cy2 = (r2.top + r2.bottom) / 2;
+                            const dist = Math.hypot(cx1 - cx2, cy1 - cy2);
+                            if (dist < ATTACHMENT_MAX_DIST) {
+                                const href = a?.getAttribute('href') || '';
+                                if (filterHref(href)) found.push(href);
+                            }
+                        }
+                    });
+                    img.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
+                };
+                await Promise.all(imgs.map(img => scanImg(img)));
+                if (found.length > 0) {
+                    const prev = existing.attachments || [];
+                    existing.attachments = Array.from(new Set([...prev, ...found]));
+                }
+                scannedAttachmentTurns.add(turnId);
+            }
 
             const clone = turn.cloneNode(true);
             const trash = ['.actions-container', '.turn-footer', 'button', 'mat-icon', 'ms-grounding-sources', 'ms-search-entry-point', '.role-label', '.ms-role-tag', 'svg', '.author-label'];
@@ -971,13 +1085,13 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                 existing.text = text;
             }
 
-            if (existing.text || existing.thoughts) {
+            if (existing.text || existing.thoughts || (Array.isArray(existing.attachments) && existing.attachments.length > 0)) {
                 collectedData.set(turnId, existing);
                 if (role === ROLE_USER || (role === ROLE_GEMINI && !!existing.text)) {
                     processedTurnIds.add(turnId);
                 }
             }
-        });
+        }
     }
 
     function findLastCommonIdx(newIds, oldOrder) {
@@ -1225,10 +1339,14 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             }
             const roleName = getRoleName(item.role);
             const textOut = (item.text || '').trim();
+            const attachmentsMd = generateAttachmentsMarkdown(item);
             if (textOut.length > 0) {
                 const processedText = convertResourcesToLinks(textOut);
                 content += `## ${roleName}\n\n${processedText}\n\n`;
+                if (attachmentsMd) content += attachmentsMd;
                 content += `---\n\n`;
+            } else if (attachmentsMd) {
+                content += attachmentsMd + `---\n\n`;
             }
         }
 
@@ -1416,6 +1534,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
 
             const roleName = getRoleName(item.role);
             let processedText = (item.text || '').trim();
+            const attachmentsMd = generateAttachmentsMarkdown(item);
 
             processedText = processedText.replace(IMG_REGEX, (match, alt, url, title) => {
                 if (imgMap.has(url)) {
@@ -1434,24 +1553,63 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
 
             if (processedText.length > 0) {
                 content += `## ${roleName}\n\n${processedText}\n\n`;
+                if (attachmentsMd) content += attachmentsMd;
                 content += `---\n\n`;
+            } else if (attachmentsMd) {
+                content += attachmentsMd + `---\n\n`;
             }
         }
 
         return content;
     }
 
-    function convertResourcesToLinks(text) {
-        const toFileName = (url) => {
-            try {
-                const u = new URL(url);
-                const base = u.pathname.substring(u.pathname.lastIndexOf('/') + 1) || 'file';
-                return decodeURIComponent(base);
-            } catch (_) {
-                const base = url.split('/').pop().split('?')[0] || 'file';
-                try { return decodeURIComponent(base); } catch (_) { return base; }
+    function toFileName(url) {
+        let base = 'file';
+        try {
+            const u = new URL(url);
+            base = u.pathname.substring(u.pathname.lastIndexOf('/') + 1) || 'file';
+            if (!base || base === 'file') {
+                const qp = new URLSearchParams(u.search);
+                const cand = qp.get('filename') || qp.get('file') || qp.get('name');
+                if (cand) base = cand;
             }
-        };
+        } catch (_) {
+            base = url.split('/').pop().split('?')[0] || 'file';
+            if (!base || base === 'file') {
+                const m = String(url).match(/[?&](?:filename|file|name)=([^&]+)/i);
+                if (m) base = m[1];
+            }
+        }
+        base = String(base).replace(/^['"]+|['"]+$/g, '');
+        try {
+            return decodeURIComponent(base);
+        } catch (_) {
+            return base;
+        }
+    }
+
+    function escapeMdLabel(s) {
+        return String(s || '').replace(/]/g, '\\]').replace(/\n/g, ' ');
+    }
+
+    function generateAttachmentsMarkdown(item) {
+        const links = Array.isArray(item.attachments) ? item.attachments : [];
+        if (links.length === 0 && !(ATTACHMENT_COMBINED_FALLBACK && item.attachmentScanAttempted)) {
+            return '';
+        }
+        let listContent;
+        if (links.length > 0) {
+            listContent = links.map(u => {
+                const label = escapeMdLabel(toFileName(u));
+                return `- [${label}](<${u}>)`;
+            }).join('\n');
+        } else {
+            listContent = `- ${t('attachments_link_unavailable')}`;
+        }
+        return `### ${t('attachments_section')}\n\n${listContent}\n\n`;
+    }
+
+    function convertResourcesToLinks(text) {
         const replacedImages = text.replace(IMG_REGEX, (match, alt, url) => {
             const name = (alt && alt.trim().length > 0) ? alt.trim() : toFileName(url);
             return `[${name}](${url})`;
