@@ -2,7 +2,7 @@
 // @name         Google AI Studio Exporter
 // @name:zh-CN   Google AI Studio 对话导出器
 // @namespace    https://github.com/GhostXia/Google-AI-Studio-Exporter
-// @version      1.4.8
+// @version      1.5.0
 // @description  Export your Gemini chat history from Google AI Studio to a text file. Features: Auto-scrolling, User/Model role differentiation, clean output, and full mobile optimization.
 // @description:zh-CN 完美导出 Google AI Studio 对话记录。具备自动滚动加载、精准去重、防抖动、User/Model角色区分，以及全平台响应式优化。支持 PC、平板、手机全平台。
 // @author       GhostXia
@@ -1047,14 +1047,9 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                     });
                     img.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
                 };
-                const queue = imgs.slice();
-                const workers = Array.from({ length: Math.min(queue.length, ATTACHMENT_SCAN_CONCURRENCY) }, async () => {
-                    while (queue.length) {
-                        const img = queue.shift();
-                        await scanImg(img);
-                    }
-                });
-                if (workers.length > 0) await Promise.all(workers);
+                for (const img of imgs) {
+                    await scanImg(img);
+                }
                 if (found.length > 0) {
                     const prev = existing.attachments || [];
                     existing.attachments = Array.from(new Set([...prev, ...found]));
@@ -1579,18 +1574,19 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
 
     function generateAttachmentsMarkdown(item) {
         const links = Array.isArray(item.attachments) ? item.attachments : [];
-        let content = '';
-        if (links.length > 0) {
-            content += `### ${t('attachments_section')}\n\n`;
-            for (const u of links) {
-                const label = escapeMdLabel(toFileName(u));
-                content += `- [${label}](<${u}>)\n`;
-            }
-            content += `\n`;
-        } else if (ATTACHMENT_COMBINED_FALLBACK && item.attachmentScanAttempted) {
-            content += `### ${t('attachments_section')}\n\n- ${t('attachments_link_unavailable')}\n\n`;
+        if (links.length === 0 && !(ATTACHMENT_COMBINED_FALLBACK && item.attachmentScanAttempted)) {
+            return '';
         }
-        return content;
+        let listContent;
+        if (links.length > 0) {
+            listContent = links.map(u => {
+                const label = escapeMdLabel(toFileName(u));
+                return `- [${label}](<${u}>)`;
+            }).join('\n');
+        } else {
+            listContent = `- ${t('attachments_link_unavailable')}`;
+        }
+        return `### ${t('attachments_section')}\n\n${listContent}\n\n`;
     }
 
     function convertResourcesToLinks(text) {
