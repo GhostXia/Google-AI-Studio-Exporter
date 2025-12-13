@@ -424,6 +424,9 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     let isHandlingEscape = false;
     const EMBED_JSZIP_BASE64 = '';
     const DISABLE_SCRIPT_INJECTION = true;
+    const ATTACHMENT_COMBINED_FALLBACK = true;
+    const ATTACHMENT_MAX_DIST = 160;
+    const scannedAttachmentTurns = new Set();
     const JSZIP_URLS = [
         'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
         'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.js',
@@ -847,7 +850,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
 
         try {
             while (isRunning) {
-                captureData(scroller);
+                await captureData(scroller);
                 updateUI('SCROLLING', collectedData.size);
 
                 scroller.scrollBy({ top: window.innerHeight * 0.7, behavior: 'smooth' });
@@ -920,7 +923,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         return document.documentElement;
     }
 
-    function captureData(scroller = document) {
+    async function captureData(scroller = document) {
         // Scope the query to the scroller container to avoid capturing elements from other parts of the page
         const turns = scroller.querySelectorAll('ms-chat-turn');
 
@@ -938,7 +941,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             .filter(id => !!id)));
         updateTurnOrder(visibleTurnIds);
 
-        turns.forEach(turn => {
+        for (const turn of turns) {
             // Check if the element is visible (offsetParent is null for hidden elements)
             if (turn.offsetParent === null || window.getComputedStyle(turn).visibility === 'hidden') return;
 
@@ -968,12 +971,64 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                         }
                     }
                 });
+                const anchors = el.querySelectorAll('a[href]');
+                anchors.forEach(a => {
+                    const href = (a.getAttribute('href') || '').trim();
+                    const lower = href.toLowerCase();
+                    if (!href) return;
+                    if (lower.startsWith('data:')) return;
+                    if (lower.startsWith('javascript:')) return;
+                    if (href === '#') return;
+                    if (lower.startsWith('http') || (ATTACHMENT_COMBINED_FALLBACK && lower.startsWith('blob:'))) {
+                        links.push(href);
+                    }
+                });
                 return Array.from(new Set(links));
             };
-            const dlLinks = extractDownloadLinks(turn);
+            let dlLinks = extractDownloadLinks(turn);
             if (dlLinks.length > 0) {
                 const prev = existing.attachments || [];
                 existing.attachments = Array.from(new Set([...prev, ...dlLinks]));
+            }
+
+            if ((!existing.attachments || existing.attachments.length === 0) && !scannedAttachmentTurns.has(turnId)) {
+                const imgs = turn.querySelectorAll('img');
+                const found = [];
+                for (const img of imgs) {
+                    const r1 = img.getBoundingClientRect();
+                    img.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+                    img.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+                    await sleep(200);
+                    const spans = document.querySelectorAll('span.material-symbols-outlined, span.ms-button-icon-symbol');
+                    spans.forEach(sp => {
+                        const txt = (sp.textContent || '').trim().toLowerCase();
+                        if (txt !== 'download') return;
+                        let a = sp.closest('a');
+                        if (!a) {
+                            const p = sp.parentElement;
+                            if (p) a = p.querySelector('a[href]');
+                        }
+                        if (a && a.href) {
+                            const r2 = a.getBoundingClientRect();
+                            const cx1 = (r1.left + r1.right) / 2, cy1 = (r1.top + r1.bottom) / 2;
+                            const cx2 = (r2.left + r2.right) / 2, cy2 = (r2.top + r2.bottom) / 2;
+                            const dist = Math.hypot(cx1 - cx2, cy1 - cy2);
+                            if (dist < ATTACHMENT_MAX_DIST) {
+                                const href = a.href;
+                                const lower = href.toLowerCase();
+                                if (!lower.startsWith('data:') && !lower.startsWith('javascript:') && (lower.startsWith('http') || (ATTACHMENT_COMBINED_FALLBACK && lower.startsWith('blob:')))) {
+                                    found.push(href);
+                                }
+                            }
+                        }
+                    });
+                    img.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
+                }
+                if (found.length > 0) {
+                    const prev = existing.attachments || [];
+                    existing.attachments = Array.from(new Set([...prev, ...found]));
+                }
+                scannedAttachmentTurns.add(turnId);
             }
 
             const clone = turn.cloneNode(true);
@@ -1002,7 +1057,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                     processedTurnIds.add(turnId);
                 }
             }
-        });
+        }
     }
 
     function findLastCommonIdx(newIds, oldOrder) {
@@ -1272,6 +1327,8 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                         content += `- [${label}](${u})\n`;
                     }
                     content += `\n`;
+                } else if (ATTACHMENT_COMBINED_FALLBACK) {
+                    content += `### Attachments\n\n- [link unavailable]\n\n`;
                 }
                 content += `---\n\n`;
             }
