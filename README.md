@@ -132,7 +132,7 @@ AGPL-3.0 License
 
 - Due to strict site CSP policies, dynamic script injection is disabled; packaging attachments into a ZIP may be unavailable.
 - The exporter now consolidates attachments into the Markdown as clickable links, e.g. `[image.jpg](https://...)` and `[file.pdf](https://...)`.
-- In the mode selection UI, the “📦 With Attachments” button is disabled and shows “(merged into text only)”. Choose “📄 Text Only” to export with embedded links.
+- In the mode selection UI, the “📦 With Attachments” button is disabled. Choose “📄 Text Only” to export a Markdown file with embedded links for attachments.
 - Press `ESC` during packaging to cancel and save the current progress.
 
 ### 📎 附件处理说明
