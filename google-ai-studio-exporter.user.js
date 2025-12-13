@@ -928,59 +928,69 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                 return el;
             }
             el = el.parentElement;
-        }
-        return document.documentElement;
     }
+    return document.documentElement;
+}
 
-    function filterHref(href) {
+function normalizeHref(href) {
+    try {
+        const raw = String(href || '').trim();
+        if (!raw || raw === '#') return '';
+        const u = new URL(raw, window.location.href);
+        return u.href;
+    } catch (_) {
+        return '';
+    }
+}
+
+function filterHref(href) {
         if (!href) return false;
-        const lower = href.trim().toLowerCase();
-        if (lower === '#') return false;
-        if (/^https?:/i.test(lower)) return true;
+        const lower = href.toLowerCase();
+        if (lower.startsWith('http:') || lower.startsWith('https:')) return true;
         if (ATTACHMENT_COMBINED_FALLBACK && lower.startsWith('blob:')) return true;
         return false;
-    }
+}
 
-    function extractDownloadLinksFromTurn(el) {
-        const links = [];
-        const isDownloadish = (href, a) => {
-            if (!href) return false;
-            const h = href.toLowerCase();
-            const hasDownloadAttr = !!(a && a.getAttribute('download'));
-            const tokenMatch = h.includes('/download') || h.includes('download=true') || h.includes('/dl/');
-            const extMatch = /(\.zip|\.pdf|\.png|\.jpe?g|\.gif|\.webp|\.mp4|\.mov|\.tgz|\.tar\.gz|\.exe|\.rar|\.7z|\.csv|\.txt|\.json|\.md|\.xlsx|\.docx)(?:$|[?#])/i.test(h);
-            let hostMatch = false;
-            try {
-                const u = new URL(href);
-                const host = u.hostname.toLowerCase();
-                hostMatch = [
-                    's3.amazonaws.com',
-                    'googleapis.com',
-                    'storage.googleapis.com',
-                    'drive.google.com',
-                    'blob.core.windows.net',
-                    'googleusercontent.com'
-                ].some(domain => host.includes(domain));
-            } catch (_) {}
-            const schemeMatch = h.startsWith('blob:') || h.startsWith('data:');
-            return hasDownloadAttr || tokenMatch || extMatch || hostMatch || schemeMatch;
-        };
-        const icons = el.querySelectorAll('span.material-symbols-outlined, span.ms-button-icon-symbol');
-        icons.forEach(sp => {
-            const txt = (sp.textContent || '').trim().toLowerCase();
-            if (txt === 'download' || txt === '下载') {
-                const a = sp.closest('a') || sp.parentElement?.querySelector('a[href]');
-                const href = a?.getAttribute('href') || '';
-                if (filterHref(href)) links.push(href);
-            }
-        });
-        const anchors = el.querySelectorAll('a[href]');
-        anchors.forEach(a => {
-            const href = a.getAttribute('href') || '';
-            if (isDownloadish(href, a) && filterHref(href)) links.push(href);
-        });
-        return Array.from(new Set(links));
-    }
+function extractDownloadLinksFromTurn(el) {
+    const links = [];
+    const isDownloadish = (href, a) => {
+        if (!href) return false;
+        const h = href.toLowerCase();
+        const hasDownloadAttr = !!(a && a.getAttribute('download'));
+        const tokenMatch = h.includes('/download') || h.includes('download=true') || h.includes('/dl/');
+        const extMatch = /(\.zip|\.pdf|\.png|\.jpe?g|\.gif|\.webp|\.mp4|\.mov|\.tgz|\.tar\.gz|\.exe|\.rar|\.7z|\.csv|\.txt|\.json|\.md|\.xlsx|\.docx)(?:$|[?#])/i.test(h);
+        let hostMatch = false;
+        try {
+            const u = new URL(href, window.location.href);
+            const host = u.hostname.toLowerCase();
+            hostMatch = [
+                's3.amazonaws.com',
+                'googleapis.com',
+                'storage.googleapis.com',
+                'drive.google.com',
+                'blob.core.windows.net',
+                'googleusercontent.com'
+            ].some(domain => host === domain || host.endsWith('.' + domain));
+        } catch (_) {}
+        const schemeMatch = h.startsWith('blob:') || h.startsWith('data:');
+        return hasDownloadAttr || tokenMatch || extMatch || hostMatch || schemeMatch;
+    };
+    const icons = el.querySelectorAll('span.material-symbols-outlined, span.ms-button-icon-symbol');
+    icons.forEach(sp => {
+        const txt = (sp.textContent || '').trim().toLowerCase();
+        if (txt === 'download' || txt === '下载') {
+            const a = sp.closest('a') || sp.parentElement?.querySelector('a[href]');
+            const href = normalizeHref(a?.getAttribute('href') || '');
+            if (filterHref(href)) links.push(href);
+        }
+    });
+    const anchors = el.querySelectorAll('a[href]');
+    anchors.forEach(a => {
+        const href = normalizeHref(a.getAttribute('href') || '');
+        if (isDownloadish(href, a) && filterHref(href)) links.push(href);
+    });
+    return Array.from(new Set(links));
+}
 
     async function captureData(scroller = document) {
         // Scope the query to the scroller container to avoid capturing elements from other parts of the page
@@ -1047,9 +1057,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                     });
                     img.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
                 };
-                for (const img of imgs) {
-                    await scanImg(img);
-                }
+                await Promise.all(imgs.map(img => scanImg(img)));
                 if (found.length > 0) {
                     const prev = existing.attachments || [];
                     existing.attachments = Array.from(new Set([...prev, ...found]));
@@ -1331,15 +1339,14 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             }
             const roleName = getRoleName(item.role);
             const textOut = (item.text || '').trim();
+            const attachmentsMd = generateAttachmentsMarkdown(item);
             if (textOut.length > 0) {
                 const processedText = convertResourcesToLinks(textOut);
                 content += `## ${roleName}\n\n${processedText}\n\n`;
-                const attachmentsMd = generateAttachmentsMarkdown(item);
                 if (attachmentsMd) content += attachmentsMd;
                 content += `---\n\n`;
-            } else {
-                const attachmentsMd = generateAttachmentsMarkdown(item);
-                if (attachmentsMd) content += attachmentsMd + `---\n\n`;
+            } else if (attachmentsMd) {
+                content += attachmentsMd + `---\n\n`;
             }
         }
 
@@ -1527,6 +1534,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
 
             const roleName = getRoleName(item.role);
             let processedText = (item.text || '').trim();
+            const attachmentsMd = generateAttachmentsMarkdown(item);
 
             processedText = processedText.replace(IMG_REGEX, (match, alt, url, title) => {
                 if (imgMap.has(url)) {
@@ -1545,12 +1553,10 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
 
             if (processedText.length > 0) {
                 content += `## ${roleName}\n\n${processedText}\n\n`;
-                const attachmentsMd = generateAttachmentsMarkdown(item);
                 if (attachmentsMd) content += attachmentsMd;
                 content += `---\n\n`;
-            } else {
-                const attachmentsMd = generateAttachmentsMarkdown(item);
-                if (attachmentsMd) content += attachmentsMd + `---\n\n`;
+            } else if (attachmentsMd) {
+                content += attachmentsMd + `---\n\n`;
             }
         }
 
