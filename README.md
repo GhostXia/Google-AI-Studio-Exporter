@@ -27,7 +27,7 @@ This UserScript solves the problem of "Virtual Scrolling" in Google AI Studio, a
 *   **🛡️ Active Detection**: Works perfectly even on fresh page loads (no manual scrolling needed).
 *   **🧹 Clean Output**: Removes UI garbage (buttons, icons, "Run/Edit" text) and keeps only the dialogue.
 *   **🎨 Interactive UI**: Beautiful overlay with progress tracking, countdown, and status indicators.
-*   **📎 Attachment Links**: When ZIP packaging is unavailable due to CSP, attachments are merged into Markdown as clickable links; top banner informs the policy and the “With Attachments” button is disabled with a hint.
+*   **� Text-First Export**: Prefer Markdown output; attachments are integrated as clickable links. In CSP-restricted environments, ZIP is disabled, a top banner informs the policy, and the “With Attachments” button is disabled with a hint.
 *   **🔒 Safety Lock**: Prevents double-downloads and allows emergency stop via `ESC` key.
 
 ### 📦 Installation
@@ -44,6 +44,7 @@ This UserScript solves the problem of "Virtual Scrolling" in Google AI Studio, a
 2.  Wait for the **3-second countdown** (Do not touch your mouse!).
 3.  The script will **automatically scroll** to the top and then down to capture all messages.
 4.  Once finished, a `.md` file will be downloaded automatically.
+5.  Recommended: choose “📄 Text Only” for a text-first export with embedded links.
 
 > **Tip**: Press `ESC` key at any time to stop scrolling and save what has been captured so far.
 
@@ -79,7 +80,7 @@ Here is the analysis of the code...
 *   **🛡️ 主动探测机制**：v14内核，解决冷启动找不到滚动条的问题。
 *   **🧹 数据清洗**：自动去除按钮、图标、引用来源等干扰信息，只保留纯净文本。
 *   **🎨 交互式 UI**：带有倒计时、进度显示和状态提示的漂亮界面。
-*   **📎 附件链接**：在 CSP 限制下不再打包 ZIP，附件将以可点击链接整合进 Markdown；顶部横幅提示该策略，模式选择界面“包含附件”按钮禁用并显示“（已合并至纯文本）”。
+*   **� 以纯文本为主**：优先导出 Markdown；附件统一整合为可点击链接。CSP 环境禁用 ZIP，顶部横幅提示策略，模式选择界面“包含附件”按钮禁用并显示“（已合并至纯文本）”。
 *   **🔒 安全机制**：防止重复下载，支持按 `ESC` 键随时中断并保存。
 
 ### 📦 安装方法
@@ -96,6 +97,7 @@ Here is the analysis of the code...
 2.  等待 **3秒倒计时**（请勿操作鼠标！）。
 3.  脚本将 **自动滚动** 到顶部，然后向下滚动以抓取所有消息。
 4.  完成后，会自动下载一个 `.md` 文件。
+5.  建议：选择“📄 纯文本”进行以文本为主的导出，附件以链接形式整合。
 
 > **提示**：随时按 `ESC` 键可停止滚动并保存已抓取的内容。
 
