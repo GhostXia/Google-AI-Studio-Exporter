@@ -2,7 +2,7 @@
 // @name         Google AI Studio Exporter
 // @name:zh-CN   Google AI Studio 对话导出器
 // @namespace    https://github.com/GhostXia/Google-AI-Studio-Exporter
-// @version      1.4.0
+// @version      1.4.8
 // @description  Export your Gemini chat history from Google AI Studio to a text file. Features: Auto-scrolling, User/Model role differentiation, clean output, and full mobile optimization.
 // @description:zh-CN 完美导出 Google AI Studio 对话记录。具备自动滚动加载、精准去重、防抖动、User/Model角色区分，以及全平台响应式优化。支持 PC、平板、手机全平台。
 // @author       GhostXia
@@ -15,20 +15,39 @@
 // @updateURL    https://github.com/GhostXia/Google-AI-Studio-Exporter/raw/main/google-ai-studio-exporter.user.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js
 // @grant        GM_xmlhttpRequest
+// @grant        unsafeWindow
+// @connect      cdnjs.cloudflare.com
+// @connect      cdn.jsdelivr.net
+// @connect      unpkg.com
+// @connect      lh3.googleusercontent.com
+// @connect      googleusercontent.com
+// @connect      storage.googleapis.com
+// @connect      gstatic.com
 // ==/UserScript==
 
-(function () {
-    'use strict';
+// 在 IIFE 外部捕获 @require 加载的 JSZip（避免沙盒作用域问题）
+/* global JSZip */
+const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
+
+    (function () {
+        'use strict';
+
+        const DEBUG = false;
+        const dlog = (...args) => { if (DEBUG) console.log(...args); };
+        dlog('[AI Studio Exporter] Script started');
+        dlog('[AI Studio Exporter] _JSZipRef:', _JSZipRef);
+        dlog('[AI Studio Exporter] typeof JSZip:', typeof JSZip);
+        dlog('[AI Studio Exporter] unsafeWindow.JSZip:', typeof unsafeWindow !== 'undefined' ? unsafeWindow.JSZip : 'unsafeWindow not available');
 
     // ==========================================
     // 0. 国际化 (i18n)
     // ==========================================
     const lang = navigator.language.startsWith('zh') ? 'zh' : 'en';
         const translations = {
-        'zh': {
-            'btn_export': '🚀 导出',
-            'title_ready': '准备就绪',
-            'status_init': '初始化中...',
+            'zh': {
+                'btn_export': '🚀 导出',
+                'title_ready': '准备就绪',
+                'status_init': '初始化中...',
             'btn_save': '💾 保存',
             'btn_close': '关闭',
             'title_countdown': '准备开始',
@@ -58,12 +77,20 @@
             'status_packaging_files': '正在打包 {n} 个文件...',
             'status_packaging_files_progress': '打包文件: {c}/{t}',
             'ui_turns': '回合数',
-            'ui_paragraphs': '输出段落数'
-        },
-        'en': {
-            'btn_export': '🚀 Export',
-            'title_ready': 'Ready',
-            'status_init': 'Initializing...',
+            'ui_paragraphs': '输出段落数',
+            'title_zip_missing': 'JSZip 加载失败',
+            'status_zip_missing': '无法加载附件打包库。是否回退到纯文本？',
+            'btn_retry': '重试',
+            'btn_cancel': '取消',
+            'status_esc_hint': '按 <b>ESC</b> 可取消并选择保存方式',
+            'title_cancel': '已取消导出',
+            'status_cancel': '请选择继续打包附件或改为纯文本保存',
+            'banner_top': '📎 附件已合并为 Markdown 链接（纯文本导出）'
+            },
+            'en': {
+                'btn_export': '🚀 Export',
+                'title_ready': 'Ready',
+                'status_init': 'Initializing...',
             'btn_save': '💾 Save',
             'btn_close': 'Close',
             'title_countdown': 'Get Ready',
@@ -93,9 +120,17 @@
             'status_packaging_files': 'Packaging {n} files...',
             'status_packaging_files_progress': 'Packaging files: {c}/{t}',
             'ui_turns': 'Turns',
-            'ui_paragraphs': 'Output paragraphs'
-        }
-    };
+            'ui_paragraphs': 'Output paragraphs',
+            'title_zip_missing': 'JSZip load failed',
+            'status_zip_missing': 'Could not load ZIP library. Fallback to text?',
+            'btn_retry': 'Retry',
+            'btn_cancel': 'Cancel',
+            'status_esc_hint': 'Press <b>ESC</b> to cancel and choose how to save',
+            'title_cancel': 'Export cancelled',
+            'status_cancel': 'Choose to continue attachments or save as text',
+            'banner_top': '📎 Attachments merged as Markdown links (Text-only export)'
+            }
+        };
 
     function t(key, params = {}) {
         let str = translations[lang][key] || key;
@@ -137,8 +172,8 @@
             padding: 32px; 
             border-radius: 20px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            width: 90%; 
-            max-width: 480px;
+            width: 92%; 
+            max-width: 560px;
             text-align: center; 
             position: relative;
             animation: ai-slide-up 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -156,12 +191,22 @@
             color: #202124;
             letter-spacing: -0.5px;
         }
+        .ai-banner {
+            background: #fff7cd;
+            color: #5f6368;
+            padding: 10px 12px;
+            border-radius: 10px;
+            margin-bottom: 14px;
+            font-size: 13px;
+        }
         
         .ai-status { 
             font-size: 15px; 
             margin-bottom: 24px; 
             line-height: 1.7; 
             color: #5f6368; 
+            word-break: break-word; 
+            white-space: pre-wrap;
         }
         
         .ai-count { 
@@ -195,6 +240,11 @@
             flex: 1;
             max-width: 150px;
         }
+        .ai-btn[disabled] {
+            opacity: 0.6;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
         
         .ai-btn-secondary {
             background: linear-gradient(135deg, #5f6368 0%, #3c4043 100%);
@@ -216,6 +266,11 @@
         .ai-red { 
             color: #d93025; 
             font-weight: 700; 
+        }
+        .ai-hint {
+            color: #5f6368;
+            font-size: 13px;
+            align-self: center;
         }
 
         /* 悬浮按钮 - PC 默认样式 */
@@ -350,6 +405,7 @@
             .ai-status { color: #9aa0a6; }
             .ai-count { color: #9aa0a6; }
         }
+        
     `;
     document.head.appendChild(style);
 
@@ -364,6 +420,16 @@
     let overlay, titleEl, statusEl, countEl, closeBtn;
     let exportMode = null; // 'full' or 'text'
     let cachedExportBlob = null;
+    let cancelRequested = false;
+    let isHandlingEscape = false;
+    const EMBED_JSZIP_BASE64 = '';
+    const DISABLE_SCRIPT_INJECTION = true;
+    const JSZIP_URLS = [
+        'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
+        'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.js',
+        'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js',
+        'https://unpkg.com/jszip@3.10.1/dist/jszip.min.js'
+    ];
 
     // ==========================================
     // 3. UI 逻辑
@@ -388,6 +454,7 @@
         overlay.innerHTML = `
             <div id="ai-box">
                 <div class="ai-title">${t('title_ready')}</div>
+                <div class="ai-banner">${t('banner_top')}</div>
                 <div class="ai-status">${t('status_init')}</div>
                 <div class="ai-count">0</div>
                 <div class="ai-btn-container">
@@ -417,24 +484,37 @@
                 }
             } catch (err) {
                 console.error("Failed to re-download file:", err);
+                debugLog((t('err_runtime') + (err && err.message ? err.message : '')), 'error');
                 updateUI('ERROR', t('err_runtime') + err.message);
             }
         };
     }
 
-    function getDualCounts() {
-        const turns = turnOrder.length;
+    function computeCounts(order, map, includeUser = false) {
+        const turns = order.length;
         let paragraphs = 0;
-        for (const id of turnOrder) {
-            const item = collectedData.get(id);
+        for (const id of order) {
+            const item = map.get(id);
             if (!item) continue;
             if (item.role === ROLE_GEMINI && item.thoughts) paragraphs++;
             const textOut = (item.text || '').trim();
-            if (textOut.length > 0) paragraphs++;
+            if (textOut.length > 0) {
+                if (includeUser) {
+                    paragraphs++;
+                } else if (item.role !== ROLE_USER) {
+                    paragraphs++;
+                }
+            }
         }
         return { turns, paragraphs };
     }
 
+    function getDualCounts() {
+        return computeCounts(turnOrder, collectedData, false);
+    }
+
+    // 更新遮罩界面状态（支持多种流程状态）
+    // Update overlay UI state (supports multiple workflow states)
     function updateUI(state, msg = "") {
         initUI();
         const saveBtn = overlay.querySelector('#ai-save-btn');
@@ -446,7 +526,8 @@
         if (state === 'COUNTDOWN') {
             titleEl.innerText = t('title_countdown');
             statusEl.innerHTML = t('status_countdown', msg);
-            countEl.innerText = "0";
+            countEl.style.display = 'none';
+            countEl.innerText = '';
         } else if (state === 'SCROLLING') {
             titleEl.innerText = t('title_scrolling');
             statusEl.innerHTML = t('status_scrolling');
@@ -455,9 +536,7 @@
             countEl.innerText = `${t('ui_turns')}: ${turns}\n${t('ui_paragraphs')}: ${paragraphs}`;
         } else if (state === 'PACKAGING') {
             titleEl.innerText = t('title_scrolling');
-            // In PACKAGING state, the status message (msg) already contains the count (e.g., "Packaging 5 images...").
-            // So we display the full message in statusEl and hide the separate countEl to avoid duplication.
-            statusEl.innerHTML = msg;
+            statusEl.innerHTML = msg + '<br>' + t('status_esc_hint');
             countEl.style.display = 'none';
         } else if (state === 'FINISHED') {
             titleEl.innerText = t('title_finished');
@@ -470,11 +549,14 @@
         } else if (state === 'ERROR') {
             titleEl.innerText = t('title_error');
             statusEl.innerHTML = `<span class="ai-red">${msg}</span>`;
+            debugLog(msg, 'error');
             btnContainer.style.display = 'flex';
             closeBtn.style.display = 'inline-block';
         }
     }
 
+    // 显示导出模式选择（附件/纯文本）
+    // Show export mode selection (attachments/text-only)
     function showModeSelection() {
         return new Promise((resolve, reject) => {
             initUI();
@@ -501,12 +583,18 @@
                 btn.textContent = text;
                 btn.onclick = onClick;
                 btnContainer.appendChild(btn);
+                return btn;
             };
 
-            createModeButton('ai-mode-full', t('btn_mode_full'), true, () => {
+            const fullBtn = createModeButton('ai-mode-full', t('btn_mode_full'), true, () => {
                 exportMode = 'full';
                 resolve('full');
             });
+            fullBtn.disabled = true;
+            const fullHint = document.createElement('span');
+            fullHint.className = 'ai-hint';
+            fullHint.textContent = '（已合并至纯文本）';
+            btnContainer.appendChild(fullHint);
 
             createModeButton('ai-mode-text', t('btn_mode_text'), false, () => {
                 exportMode = 'text';
@@ -520,9 +608,105 @@
         });
     }
 
+    function debugLog(message, level = 'info') {
+        try {
+            if (!overlay) initUI();
+            if (!statusEl) return;
+            const line = document.createElement('div');
+            if (level === 'error') {
+                line.className = 'ai-red';
+            }
+            line.textContent = message;
+            statusEl.appendChild(line);
+        } catch (_) {}
+    }
+
+    window.addEventListener('error', (e) => {
+        const msg = e && e.message ? e.message : 'Script error';
+        debugLog(msg, 'error');
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+        const reason = e && e.reason ? (e.reason.message || String(e.reason)) : 'Unhandled rejection';
+        debugLog(reason, 'error');
+    });
+
+    // 当 ZIP 库不可用时的回退提示（纯文本/重试/取消）
+    // Fallback prompt when ZIP library is unavailable (text/retry/cancel)
+    function showZipFallbackPrompt() {
+        return new Promise((resolve) => {
+            initUI();
+            titleEl.innerText = t('title_zip_missing');
+            statusEl.innerHTML = t('status_zip_missing');
+            countEl.innerText = '';
+            const btnContainer = overlay.querySelector('.ai-btn-container');
+            const saveBtn = overlay.querySelector('#ai-save-btn');
+            const closeBtnEl = overlay.querySelector('#ai-close-btn');
+            if (saveBtn) saveBtn.style.display = 'none';
+            if (closeBtnEl) closeBtnEl.style.display = 'none';
+            btnContainer.style.display = 'flex';
+            btnContainer.querySelectorAll('.ai-mode-btn').forEach(btn => btn.remove());
+
+            const createModeButton = (id, text, isPrimary, onClick) => {
+                const btn = document.createElement('button');
+                btn.id = id;
+                btn.className = (isPrimary ? 'ai-btn' : 'ai-btn ai-btn-secondary') + ' ai-mode-btn';
+                btn.textContent = text;
+                btn.onclick = onClick;
+                btnContainer.appendChild(btn);
+            };
+
+            createModeButton('ai-fallback-text', t('btn_mode_text'), true, () => {
+                exportMode = 'text';
+                resolve('text');
+            });
+
+            createModeButton('ai-retry-zip', t('btn_retry'), false, () => {
+                resolve('retry');
+            });
+
+            createModeButton('ai-cancel', t('btn_cancel'), false, () => {
+                overlay.style.display = 'none';
+                resolve('cancel');
+            });
+        });
+    }
+
+    // 用户按下 ESC 的取消提示（选择继续打包或改为纯文本）
+    // Cancel prompt when user presses ESC (continue attachments or text-only)
+    function showCancelPrompt() {
+        return new Promise((resolve) => {
+            initUI();
+            titleEl.innerText = t('title_cancel');
+            statusEl.innerHTML = t('status_cancel');
+            countEl.innerText = '';
+            const btnContainer = overlay.querySelector('.ai-btn-container');
+            const saveBtn = overlay.querySelector('#ai-save-btn');
+            const closeBtnEl = overlay.querySelector('#ai-close-btn');
+            if (saveBtn) saveBtn.style.display = 'none';
+            if (closeBtnEl) closeBtnEl.style.display = 'none';
+            btnContainer.style.display = 'flex';
+            btnContainer.querySelectorAll('.ai-mode-btn').forEach(btn => btn.remove());
+
+            const createModeButton = (id, text, isPrimary, onClick) => {
+                const btn = document.createElement('button');
+                btn.id = id;
+                btn.className = (isPrimary ? 'ai-btn' : 'ai-btn ai-btn-secondary') + ' ai-mode-btn';
+                btn.textContent = text;
+                btn.onclick = onClick;
+                btnContainer.appendChild(btn);
+            };
+
+            createModeButton('ai-cancel-text', t('btn_mode_text'), true, () => resolve('text'));
+            createModeButton('ai-cancel-retry', t('btn_retry'), false, () => resolve('retry'));
+            createModeButton('ai-cancel-close', t('btn_cancel'), false, () => resolve('cancel'));
+        });
+    }
+
     // ==========================================
     // 4. 核心流程
     // ==========================================
+    // 导出主流程：模式选择 → 倒计时 → 采集 → 导出
+    // Main export flow: mode select → countdown → capture → export
     async function startProcess() {
         if (isRunning) return;
         // isRunning = true; // Moved to after mode selection
@@ -531,12 +715,15 @@
         turnOrder = [];
         processedTurnIds.clear();
         cachedExportBlob = null;
+        cancelRequested = false;
+
+        autoFixFormFieldAttributes();
 
         // 显示模式选择
         try {
             await showModeSelection();
         } catch (e) {
-            console.log('Export cancelled.');
+            dlog('Export cancelled.');
             // isRunning is still false here, so no cleanup needed
             return;
         }
@@ -552,7 +739,7 @@
 
         // 移动端增强激活逻辑
         if (!scroller || scroller.scrollHeight <= scroller.clientHeight) {
-            console.log("尝试主动激活滚动容器...");
+            dlog("尝试主动激活滚动容器...");
             // 先尝试滚动 window
             window.scrollBy(0, 1);
             await sleep(100);
@@ -561,7 +748,7 @@
 
         // 如果还是找不到，尝试触摸激活
         if (!scroller || scroller.scrollHeight <= scroller.clientHeight) {
-            console.log("尝试触摸激活...");
+            dlog("尝试触摸激活...");
             const bubble = document.querySelector('ms-chat-turn');
             if (bubble) {
                 bubble.scrollIntoView({ behavior: 'instant' });
@@ -580,29 +767,29 @@
         // ========================================
         // 智能跳转：使用滚动条按钮直接跳到第一个对话
         // ========================================
-        console.log("尝试使用滚动条按钮跳转到第一个对话...");
+        dlog("尝试使用滚动条按钮跳转到第一个对话...");
 
         // 查找所有对话轮次按钮
         const scrollbarButtons = document.querySelectorAll('button[id^="scrollbar-item-"]');
-        console.log(`找到 ${scrollbarButtons.length} 个对话轮次按钮`);
+        dlog(`找到 ${scrollbarButtons.length} 个对话轮次按钮`);
 
         if (scrollbarButtons.length > 0) {
             // 点击第一个按钮（最早的对话）
             const firstButton = scrollbarButtons[0];
-            console.log("点击第一个对话按钮:", firstButton.getAttribute('name') || firstButton.id);
+            dlog("点击第一个对话按钮:", firstButton.getAttribute('name') || firstButton.id);
             firstButton.click();
 
             // 等待跳转和渲染
             await sleep(1500);
-            console.log("跳转后 scrollTop:", scroller.scrollTop);
+            dlog("跳转后 scrollTop:", scroller.scrollTop);
         } else {
-            console.log("未找到滚动条按钮，使用备用方案...");
+            dlog("未找到滚动条按钮，使用备用方案...");
         }
 
         // 备用方案：如果按钮不存在或跳转失败，逐步向上滚动
         const initialScrollTop = scroller.scrollTop;
         if (initialScrollTop > 500) {
-            console.log("执行备用滚动方案，当前 scrollTop:", initialScrollTop);
+            dlog("执行备用滚动方案，当前 scrollTop:", initialScrollTop);
             let currentPos = initialScrollTop;
             let upwardAttempts = 0;
             const maxUpwardAttempts = 15; // 减少尝试次数
@@ -617,11 +804,11 @@
                 await sleep(500);
 
                 const newPos = scroller.scrollTop;
-                console.log(`向上滚动 ${upwardAttempts}/${maxUpwardAttempts}: ${currentPos} → ${newPos}`);
+                dlog(`向上滚动 ${upwardAttempts}/${maxUpwardAttempts}: ${currentPos} → ${newPos}`);
 
                 // 如果卡住了，尝试直接设置
                 if (Math.abs(newPos - currentPos) < 10) {
-                    console.log("检测到卡住，尝试直接设置...");
+                    dlog("检测到卡住，尝试直接设置...");
                     scroller.scrollTop = Math.max(0, currentPos - scrollAmount);
                     await sleep(300);
                 }
@@ -636,7 +823,7 @@
         }
 
         // 最终确保到达顶部
-        console.log("执行最终回到顶部，当前 scrollTop:", scroller.scrollTop);
+        dlog("执行最终回到顶部，当前 scrollTop:", scroller.scrollTop);
         scroller.scrollTop = 0;
         await sleep(500);
 
@@ -646,7 +833,7 @@
             await sleep(500);
         }
 
-        console.log("✓ 回到顶部完成，最终 scrollTop:", scroller.scrollTop);
+        dlog("✓ 回到顶部完成，最终 scrollTop:", scroller.scrollTop);
 
         // 等待 DOM 稳定
         await sleep(800);
@@ -672,7 +859,7 @@
                 if (Math.abs(currentScroll - lastScrollTop) <= 2) {
                     stuckCount++;
                     if (stuckCount >= 3) {
-                        console.log("判定到底", currentScroll);
+                        dlog("判定到底", currentScroll);
                         break;
                     }
                 } else {
@@ -687,6 +874,20 @@
         }
 
         endProcess("FINISHED");
+    }
+
+    function autoFixFormFieldAttributes() {
+        try {
+            const fields = document.querySelectorAll(
+                'input[autocomplete]:not([name]), textarea[autocomplete]:not([name]), select[autocomplete]:not([name])'
+            );
+            let i = 0;
+            fields.forEach(el => {
+                const nm = 'ai_exporter_field_' + (i++);
+                el.setAttribute('name', nm);
+            });
+            if (fields.length > 0) debugLog('Auto-assigned name for ' + fields.length + ' form fields');
+        } catch (_) {}
     }
 
     // ==========================================
@@ -779,108 +980,46 @@
         });
     }
 
-    function updateTurnOrder(newIds) {
-        if (newIds.length === 0) return;
+    function findLastCommonIdx(newIds, oldOrder) {
+        for (let i = newIds.length - 1; i >= 0; i--) {
+            if (oldOrder.includes(newIds[i])) return i;
+        }
+        return -1;
+    }
 
-        // If turnOrder is empty, just assign
+    function mergeWithOverlap(oldOrder, newIds) {
+        const oldIdSet = new Set(oldOrder);
+        const result = [...oldOrder];
+        newIds.forEach((newId, index) => {
+            if (!oldIdSet.has(newId)) {
+                let prevInOldIdx = -1;
+                for (let i = index - 1; i >= 0; i--) {
+                    const neighborId = newIds[i];
+                    const pos = result.indexOf(neighborId);
+                    if (pos !== -1) { prevInOldIdx = pos; break; }
+                }
+                result.splice(prevInOldIdx + 1, 0, newId);
+            }
+        });
+        return result;
+    }
+
+    function appendDisjointIds(oldOrder, newIds) {
+        return [...oldOrder, ...newIds];
+    }
+
+    function updateTurnOrder(newIds) {
+        if (!newIds || newIds.length === 0) return;
         if (turnOrder.length === 0) {
             turnOrder = [...newIds];
             return;
         }
-
-        // Try to find overlap
-        let firstNewId = newIds[0];
-        let lastNewId = newIds[newIds.length - 1];
-
-        let startIdxInOld = turnOrder.indexOf(firstNewId);
-        let endIdxInOld = turnOrder.indexOf(lastNewId);
-
-        if (startIdxInOld !== -1) {
-            // The start of the new list exists in the old list.
-            // We should merge from that point.
-            // Check if the new list extends beyond the old list
-            let oldSlice = turnOrder.slice(startIdxInOld);
-
-            // Simple merge: if new list is longer or contains new items after the overlap
-            // For robustness, we can just append items from newIds that are NOT in turnOrder yet,
-            // assuming they come AFTER the ones we found.
-            // But a safer way for scrolling down is:
-            // Find the last common item
-            let commonIdxNew = -1;
-            for (let i = newIds.length - 1; i >= 0; i--) {
-                if (turnOrder.includes(newIds[i])) {
-                    commonIdxNew = i;
-                    break;
-                }
-            }
-
-            if (commonIdxNew !== -1) {
-                // Append everything after the last common item
-                const newItems = newIds.slice(commonIdxNew + 1);
-                turnOrder.push(...newItems);
-            } else {
-                // Should not happen if startIdxInOld != -1, but just in case
-                turnOrder.push(...newIds);
-            }
-
+        const firstCommonIdx = newIds.findIndex(id => turnOrder.includes(id));
+        if (firstCommonIdx !== -1) {
+            turnOrder = mergeWithOverlap(turnOrder, newIds);
         } else {
-            // The start of the new list is NOT in the old list.
-            // This might happen if we jumped.
-            // If we are scrolling down, maybe the *end* of the old list overlaps with *start* of new list?
-            // (Already checked startIdxInOld).
-
-            // Check if any item in newIds exists in turnOrder
-            let firstCommonIdxNew = newIds.findIndex(id => turnOrder.includes(id));
-
-            if (firstCommonIdxNew !== -1) {
-                // We found a common item later in the new list.
-                // This implies we might have scrolled UP? or captured a middle chunk?
-                // For now, let's assume we are mostly scrolling down.
-                // If we find a common item, we merge.
-
-                // Actually, if we are scrolling down, we expect new items to be at the end.
-                // If we jumped, we might have a disjoint set.
-                // If disjoint, just append? Or try to insert?
-                // Given the scrolling logic (jump to top, then scroll down), we should mostly be appending.
-                // But if we jump to top, we reset turnOrder.
-
-                // Let's stick to a simple strategy:
-                // 1. Find the last item of turnOrder in newIds.
-                // 2. If found, append the rest of newIds after that item.
-                // 3. If not found, check if the first item of newIds is in turnOrder.
-                // 4. If not found, just append everything (assume it's next block).
-
-                // Refined strategy:
-                // We want to maintain a global order.
-                // If we see [A, B, C] and then [B, C, D], we want [A, B, C, D].
-
-                let lastCommonId = null;
-                let lastCommonIdxInNew = -1;
-
-                // Find the rightmost item in newIds that already exists in turnOrder
-                for (let i = newIds.length - 1; i >= 0; i--) {
-                    if (turnOrder.includes(newIds[i])) {
-                        lastCommonId = newIds[i];
-                        lastCommonIdxInNew = i;
-                        break;
-                    }
-                }
-
-                if (lastCommonIdxInNew !== -1) {
-                    // We have an overlap. Append everything after the overlap.
-                    const toAdd = newIds.slice(lastCommonIdxInNew + 1);
-                    turnOrder.push(...toAdd);
-                } else {
-                    // No overlap. Append all.
-                    turnOrder.push(...newIds);
-                }
-            } else {
-                // No overlap at all. Append.
-                turnOrder.push(...newIds);
-            }
+            turnOrder = appendDisjointIds(turnOrder, newIds);
         }
-
-        // Deduplicate just in case (though logic above should prevent it)
         turnOrder = [...new Set(turnOrder)];
     }
 
@@ -1060,37 +1199,35 @@
         collectedData = newMap;
     }
 
+    // 统计导出内容的段落数（不含 User 段落）
+    // Count exported paragraphs (excluding User paragraphs)
     function countParagraphs() {
-        let c = 0;
-        for (const id of turnOrder) {
-            const item = collectedData.get(id);
-            if (!item) continue;
-            if (item.role === ROLE_GEMINI && item.thoughts) c++;
-            const textOut = (item.text || '').trim();
-            if (textOut.length > 0) c++;
-        }
-        return c;
+        return computeCounts(turnOrder, collectedData, false).paragraphs;
     }
 
     // Helper: Download text-only mode
-    function downloadTextOnly() {
-        let content = `# ${t('file_header')}`+"\n\n";
-        content += `**${t('file_time')}:** ${new Date().toLocaleString()}`+"\n\n";
-        content += `**${t('file_turns')}:** ${turnOrder.length}`+"\n\n";
-        content += `**${t('file_paragraphs')}:** ${countParagraphs()}`+"\n\n";
+    // 仅文本导出：生成 Markdown 并下载
+    // Text-only export: generate Markdown and download
+    async function downloadTextOnly() {
+        let content = `# ${t('file_header')}` + "\n\n";
+        content += `**${t('file_time')}:** ${new Date().toLocaleString()}` + "\n\n";
+        content += `**${t('file_turns')}:** ${turnOrder.length}` + "\n\n";
+        content += `**${t('file_paragraphs')}:** ${countParagraphs()}` + "\n\n";
         content += "---\n\n";
 
         for (const id of turnOrder) {
             const item = collectedData.get(id);
             if (!item) continue;
             if (item.role === ROLE_GEMINI && item.thoughts) {
-                content += `## ${t('role_thoughts')}\n\n${item.thoughts}\n\n`;
+                const processedThoughts = convertResourcesToLinks(item.thoughts || '');
+                content += `## ${t('role_thoughts')}\n\n${processedThoughts}\n\n`;
                 content += `---\n\n`;
             }
             const roleName = getRoleName(item.role);
             const textOut = (item.text || '').trim();
             if (textOut.length > 0) {
-                content += `## ${roleName}\n\n${textOut}\n\n`;
+                const processedText = convertResourcesToLinks(textOut);
+                content += `## ${roleName}\n\n${processedText}\n\n`;
                 content += `---\n\n`;
             }
         }
@@ -1098,9 +1235,12 @@
         const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
         cachedExportBlob = blob;
         downloadBlob(blob, `Gemini_Chat_v14_${Date.now()}.md`);
+        return;
     }
 
     // Generic Helper: Process resources (images or files)
+    // 通用打包助手：并发下载资源、支持进度与取消
+    // Generic packaging helper: concurrent downloads with progress and cancel support
     async function processResources(uniqueUrls, zipFolder, config) {
         const resourceMap = new Map();
 
@@ -1109,6 +1249,7 @@
             let completedCount = 0;
 
             const promises = Array.from(uniqueUrls).map(async (url, index) => {
+                if (cancelRequested) return;
                 try {
                     const blob = await fetchResource(url);
                     if (blob) {
@@ -1118,6 +1259,7 @@
                     }
                 } catch (e) {
                     console.error(`${config.subDir} download failed:`, url, e);
+                    debugLog(`${config.subDir} download failed: ${url} (${e && e.message ? e.message : 'error'})`, 'error');
                 }
                 completedCount++;
                 if (completedCount % 5 === 0 || completedCount === uniqueUrls.size) {
@@ -1125,7 +1267,17 @@
                 }
             });
 
-            await Promise.all(promises);
+            let cancelIntervalId = null;
+            const cancelWatcher = new Promise(resolve => {
+                cancelIntervalId = setInterval(() => {
+                    if (cancelRequested) { clearInterval(cancelIntervalId); resolve(); }
+                }, 200);
+            });
+            try {
+                await Promise.race([Promise.all(promises), cancelWatcher]);
+            } finally {
+                if (cancelIntervalId) clearInterval(cancelIntervalId);
+            }
         }
         return resourceMap;
     }
@@ -1233,10 +1385,10 @@
 
     // Helper: Generate Markdown content with URL replacements
     function generateMarkdownContent(imgMap, fileMap) {
-        let content = `# ${t('file_header')}`+"\n\n";
-        content += `**${t('file_time')}:** ${new Date().toLocaleString()}`+"\n\n";
-        content += `**${t('file_turns')}:** ${turnOrder.length}`+"\n\n";
-        content += `**${t('file_paragraphs')}:** ${countParagraphs()}`+"\n\n";
+        let content = `# ${t('file_header')}` + "\n\n";
+        content += `**${t('file_time')}:** ${new Date().toLocaleString()}` + "\n\n";
+        content += `**${t('file_turns')}:** ${turnOrder.length}` + "\n\n";
+        content += `**${t('file_paragraphs')}:** ${countParagraphs()}` + "\n\n";
         content += "---\n\n";
 
         for (const id of turnOrder) {
@@ -1289,7 +1441,117 @@
         return content;
     }
 
+    function convertResourcesToLinks(text) {
+        const toFileName = (url) => {
+            try {
+                const u = new URL(url);
+                const base = u.pathname.substring(u.pathname.lastIndexOf('/') + 1) || 'file';
+                return decodeURIComponent(base);
+            } catch (_) {
+                const base = url.split('/').pop().split('?')[0] || 'file';
+                try { return decodeURIComponent(base); } catch (_) { return base; }
+            }
+        };
+        const replacedImages = text.replace(IMG_REGEX, (match, alt, url) => {
+            const name = (alt && alt.trim().length > 0) ? alt.trim() : toFileName(url);
+            return `[${name}](${url})`;
+        });
+        const replacedLinks = replacedImages.replace(LINK_REGEX, (match, textLabel, url) => {
+            const name = (textLabel && textLabel.trim().length > 0) ? textLabel.trim() : toFileName(url);
+            return `[${name}](${url})`;
+        });
+        return replacedLinks;
+    }
+
+    // 获取 JSZip：优先使用 IIFE 外部捕获的引用
+    // Get JSZip: prefer the reference captured outside IIFE
+    function getJSZip() {
+        // 1. 使用 IIFE 外部捕获的引用（@require 加载的）
+        if (_JSZipRef) {
+            return _JSZipRef;
+        }
+        // 2. 检查当前作用域中的 JSZip
+        if (typeof JSZip !== 'undefined') {
+            return JSZip;
+        }
+        // 3. 检查页面上下文（通过 script 标签注入的）
+        if (typeof unsafeWindow !== 'undefined' && typeof unsafeWindow.JSZip !== 'undefined') {
+            return unsafeWindow.JSZip;
+        }
+        // 4. 检查 window 对象
+        if (typeof window !== 'undefined' && typeof window.JSZip !== 'undefined') {
+            return window.JSZip;
+        }
+        return null;
+    }
+
+    // 加载 JSZip 的备用方案（通过 blob URL 注入脚本绕过 CSP）
+    // Fallback loader for JSZip (inject script via blob URL to bypass CSP)
+    async function ensureJSZip() {
+        const existing = getJSZip();
+        if (existing) return existing;
+
+        if (DISABLE_SCRIPT_INJECTION) {
+            debugLog('Script injection disabled due to CSP. Use @require or choose text-only.', 'error');
+            return null;
+        }
+
+        // GM 注入：依次尝试多 CDN
+        if (typeof GM_xmlhttpRequest !== 'undefined') {
+            for (const url of JSZIP_URLS) {
+                try {
+                    /* eslint-disable no-await-in-loop */
+                    const lib = await new Promise((resolve, reject) => {
+                        GM_xmlhttpRequest({
+                            method: 'GET',
+                            url,
+                            responseType: 'blob',
+                            onload: (response) => {
+                                try {
+                                    const blobUrl = URL.createObjectURL(response.response);
+                                    const script = document.createElement('script');
+                                    script.src = blobUrl;
+                                    script.onload = () => {
+                                        URL.revokeObjectURL(blobUrl);
+                                        const loaded = getJSZip();
+                                        loaded ? resolve(loaded) : reject(new Error('JSZip not defined after load'));
+                                    };
+                                    script.onerror = () => { URL.revokeObjectURL(blobUrl); reject(new Error('JSZip script load failed')); };
+                                    document.head.appendChild(script);
+                                } catch (e) { reject(e); }
+                            },
+                            onerror: () => reject(new Error('JSZip download failed'))
+                        });
+                    });
+                    if (lib) return lib;
+                } catch (e) { debugLog('JSZip load failed: ' + url + ' (' + (e && e.message ? e.message : 'error') + ')', 'error'); }
+            }
+        }
+
+        // script 注入：依次尝试多 CDN
+        for (const url of JSZIP_URLS) {
+            try {
+                /* eslint-disable no-await-in-loop */
+                const lib = await new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = url;
+                    script.onload = () => {
+                        const loaded = getJSZip();
+                        loaded ? resolve(loaded) : reject(new Error('JSZip not defined after load'));
+                    };
+                    script.onerror = () => reject(new Error('JSZip load failed'));
+                    document.head.appendChild(script);
+                });
+                if (lib) return lib;
+            } catch (e) { debugLog('JSZip script injection failed: ' + url + ' (' + (e && e.message ? e.message : 'error') + ')', 'error'); }
+        }
+        debugLog('All JSZip CDN attempts failed', 'error');
+        throw new Error('All JSZip CDN attempts failed');
+    }
+
     // Main function: orchestrate the download process
+    // 导出调度：纯文本/附件模式、ZIP 生成与回退
+    // Export orchestrator: text/attachments modes, ZIP generation & fallback
     async function downloadCollectedData() {
         if (collectedData.size === 0) return false;
         // Normalize conversation before exporting (affects both modes)
@@ -1302,7 +1564,23 @@
         }
 
         // Full mode with attachments
-        const zip = new JSZip();
+        let JSZipLib = getJSZip();
+        if (!JSZipLib) {
+            try { JSZipLib = await ensureJSZip(); } catch (e) { console.error('ensureJSZip failed:', e); debugLog('ensureJSZip failed: ' + (e && e.message ? e.message : 'error'), 'error'); }
+        }
+        while (!JSZipLib) {
+            const action = await showZipFallbackPrompt();
+            if (action === 'text') {
+                downloadTextOnly();
+                return true;
+            }
+            if (action === 'retry') {
+                try { JSZipLib = await ensureJSZip(); } catch (e) { console.error('ensureJSZip retry failed:', e); }
+                continue;
+            }
+            return false;
+        }
+        const zip = new JSZipLib();
         const imgFolder = zip.folder("images");
         const fileFolder = zip.folder("files");
 
@@ -1315,17 +1593,45 @@
         // Generate final Markdown content
         const content = generateMarkdownContent(imgMap, fileMap);
 
-        // Create and download ZIP
         zip.file("chat_history.md", content);
-        const zipBlob = await zip.generateAsync({ type: "blob" });
+        let zipBlob;
+        try {
+            zipBlob = await Promise.race([
+                zip.generateAsync({ type: "blob" }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('ZIP timeout')), 15000))
+            ]);
+        } catch (e) {
+            const action = await showZipFallbackPrompt();
+            if (action === 'text') {
+                downloadTextOnly();
+                return true;
+            }
+            if (action === 'retry') {
+                try {
+                    zipBlob = await zip.generateAsync({ type: "blob" });
+                } catch (_) {
+                    downloadTextOnly();
+                    return true;
+                }
+            } else {
+                return false;
+            }
+        }
         cachedExportBlob = zipBlob;
         downloadBlob(zipBlob, `Gemini_Chat_v14_${Date.now()}.zip`);
 
         return true;
     }
 
+    // 资源下载：支持 GM_xmlhttpRequest 与 fetch，并内置超时
+    // Resource fetcher: supports GM_xmlhttpRequest and fetch, with timeout
     function fetchResource(url) {
+        const timeoutMs = 10000;
         return new Promise((resolve) => {
+            let settled = false;
+            const timeout = setTimeout(() => { if (!settled) { settled = true; debugLog(`Resource fetch timed out: ${url}`, 'error'); resolve(null); } }, timeoutMs);
+            const finish = (val) => { if (!settled) { settled = true; clearTimeout(timeout); resolve(val); } };
+
             if (typeof GM_xmlhttpRequest !== 'undefined') {
                 GM_xmlhttpRequest({
                     method: "GET",
@@ -1333,22 +1639,24 @@
                     responseType: "blob",
                     onload: (response) => {
                         if (response.status >= 200 && response.status < 300) {
-                            resolve(response.response);
+                            finish(response.response);
                         } else {
                             console.warn(`Resource fetch failed with status ${response.status}:`, url);
-                            resolve(null);
+                            debugLog(`Resource fetch failed (${response.status}): ${url}`, 'error');
+                            finish(null);
                         }
                     },
-                    onerror: () => resolve(null)
+                    onerror: () => { debugLog(`Resource fetch network error: ${url}`, 'error'); finish(null); }
                 });
             } else {
-                fetch(url)
+                fetch(url, { credentials: 'include' })
                     .then(r => {
                         if (r.ok) return r.blob();
+                        debugLog(`Fetch failed (${r.status}): ${url}`, 'error');
                         return null;
                     })
-                    .then(resolve)
-                    .catch(() => resolve(null));
+                    .then(finish)
+                    .catch(() => { debugLog(`Fetch error: ${url}`, 'error'); finish(null); });
             }
         });
     }
@@ -1387,11 +1695,35 @@
 
     function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-    document.addEventListener('keydown', e => {
-        if (e.key === 'Escape' && isRunning) {
-            endProcess("FINISHED");
+    // 全局 ESC 处理：弹出取消提示并根据选择继续或回退
+    // Global ESC handler: show cancel prompt and proceed based on choice
+    document.addEventListener('keydown', async e => {
+        if (e.key !== 'Escape') return;
+        if (!isRunning || isHandlingEscape) return;
+        isHandlingEscape = true;
+        try {
+            cancelRequested = true;
+            const choice = await showCancelPrompt();
+            if (choice === 'text') {
+                normalizeConversation();
+                exportMode = 'text';
+                try { await downloadTextOnly(); } catch (err) { debugLog('Text export failed: ' + (err && err.message ? err.message : 'error'), 'error'); }
+                updateUI('FINISHED', collectedData.size);
+                isRunning = false;
+            } else if (choice === 'retry') {
+                cancelRequested = false;
+                exportMode = 'full';
+                isRunning = true;
+                try { await downloadCollectedData(); } catch (err) { debugLog('Retry export failed: ' + (err && err.message ? err.message : 'error'), 'error'); }
+            } else {
+                isRunning = false;
+                overlay.style.display = 'none';
+            }
+        } finally {
+            isHandlingEscape = false;
         }
     });
 
     setInterval(createEntryButton, 2000);
 })();
+

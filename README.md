@@ -27,7 +27,7 @@ This UserScript solves the problem of "Virtual Scrolling" in Google AI Studio, a
 *   **🛡️ Active Detection**: Works perfectly even on fresh page loads (no manual scrolling needed).
 *   **🧹 Clean Output**: Removes UI garbage (buttons, icons, "Run/Edit" text) and keeps only the dialogue.
 *   **🎨 Interactive UI**: Beautiful overlay with progress tracking, countdown, and status indicators.
-*   **� Text-First Export**: Prefer Markdown output; attachments are integrated as clickable links. In CSP-restricted environments, ZIP is disabled, a top banner informs the policy, and the “With Attachments” button is disabled with a hint.
+*   **📄 Text-First Export**: Prefer Markdown output; attachments are integrated as clickable links. In CSP-restricted environments, ZIP is disabled, a top banner informs the policy, and the “With Attachments” button is disabled with a hint.
 *   **🔒 Safety Lock**: Prevents double-downloads and allows emergency stop via `ESC` key.
 
 ### 📦 Installation
@@ -80,7 +80,7 @@ Here is the analysis of the code...
 *   **🛡️ 主动探测机制**：v14内核，解决冷启动找不到滚动条的问题。
 *   **🧹 数据清洗**：自动去除按钮、图标、引用来源等干扰信息，只保留纯净文本。
 *   **🎨 交互式 UI**：带有倒计时、进度显示和状态提示的漂亮界面。
-*   **� 以纯文本为主**：优先导出 Markdown；附件统一整合为可点击链接。CSP 环境禁用 ZIP，顶部横幅提示策略，模式选择界面“包含附件”按钮禁用并显示“（已合并至纯文本）”。
+*   **📄 以纯文本为主**：优先导出 Markdown；附件统一整合为可点击链接。CSP 环境禁用 ZIP，顶部横幅提示策略，模式选择界面“包含附件”按钮禁用并显示“（已合并至纯文本）”。
 *   **🔒 安全机制**：防止重复下载，支持按 `ESC` 键随时中断并保存。
 
 ### 📦 安装方法
