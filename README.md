@@ -27,7 +27,7 @@ This UserScript solves the problem of "Virtual Scrolling" in Google AI Studio, a
 *   **🛡️ Active Detection**: Works perfectly even on fresh page loads (no manual scrolling needed).
 *   **🧹 Clean Output**: Removes UI garbage (buttons, icons, "Run/Edit" text) and keeps only the dialogue.
 *   **🎨 Interactive UI**: Beautiful overlay with progress tracking, countdown, and status indicators.
-*   **� Text-First Export**: Prefer Markdown output; attachments are integrated as clickable links. In CSP-restricted environments, ZIP is disabled, a top banner informs the policy, and the “With Attachments” button is disabled with a hint.
+*   **📄 Text-First Export**: Prefer Markdown output; attachments are integrated as clickable links. In CSP-restricted environments, ZIP is disabled, a top banner informs the policy, and the “With Attachments” button is disabled with a hint.
 *   **🔒 Safety Lock**: Prevents double-downloads and allows emergency stop via `ESC` key.
 
 ### 📦 Installation
