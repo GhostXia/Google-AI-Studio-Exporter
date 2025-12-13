@@ -931,8 +931,8 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     function filterHref(href) {
         if (!href) return false;
         const lower = href.trim().toLowerCase();
-        if (lower === '#' || lower.startsWith('javascript:') || lower.startsWith('data:')) return false;
-        if (lower.startsWith('http')) return true;
+        if (lower === '#') return false;
+        if (/^https?:/i.test(lower)) return true;
         if (ATTACHMENT_COMBINED_FALLBACK && lower.startsWith('blob:')) return true;
         return false;
     }
@@ -1335,18 +1335,12 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             if (textOut.length > 0) {
                 const processedText = convertResourcesToLinks(textOut);
                 content += `## ${roleName}\n\n${processedText}\n\n`;
-                const links = Array.isArray(item.attachments) ? item.attachments : [];
-                if (links.length > 0) {
-                    content += `### ${t('attachments_section')}\n\n`;
-                    for (const u of links) {
-                        const label = escapeMdLabel(toFileName(u));
-                        content += `- [${label}](<${u}>)\n`;
-                    }
-                    content += `\n`;
-                } else if (ATTACHMENT_COMBINED_FALLBACK && item.attachmentScanAttempted) {
-                    content += `### ${t('attachments_section')}\n\n- ${t('attachments_link_unavailable')}\n\n`;
-                }
+                const attachmentsMd = generateAttachmentsMarkdown(item);
+                if (attachmentsMd) content += attachmentsMd;
                 content += `---\n\n`;
+            } else {
+                const attachmentsMd = generateAttachmentsMarkdown(item);
+                if (attachmentsMd) content += attachmentsMd + `---\n\n`;
             }
         }
 
@@ -1552,28 +1546,12 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
 
             if (processedText.length > 0) {
                 content += `## ${roleName}\n\n${processedText}\n\n`;
-                const links = Array.isArray(item.attachments) ? item.attachments : [];
-                if (links.length > 0) {
-                    content += `### ${t('attachments_section')}\n\n`;
-                    for (const u of links) {
-                        const label = escapeMdLabel(toFileName(u));
-                        content += `- [${label}](<${u}>)\n`;
-                    }
-                    content += `\n`;
-                } else if (ATTACHMENT_COMBINED_FALLBACK && item.attachmentScanAttempted) {
-                    content += `### ${t('attachments_section')}\n\n- ${t('attachments_link_unavailable')}\n\n`;
-                }
+                const attachmentsMd = generateAttachmentsMarkdown(item);
+                if (attachmentsMd) content += attachmentsMd;
                 content += `---\n\n`;
             } else {
-                const links = Array.isArray(item.attachments) ? item.attachments : [];
-                if (links.length > 0) {
-                    content += `### ${t('attachments_section')}\n\n`;
-                    for (const u of links) {
-                        const label = escapeMdLabel(toFileName(u));
-                        content += `- [${label}](<${u}>)\n`;
-                    }
-                    content += `\n---\n\n`;
-                }
+                const attachmentsMd = generateAttachmentsMarkdown(item);
+                if (attachmentsMd) content += attachmentsMd + `---\n\n`;
             }
         }
 
@@ -1593,6 +1571,22 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
 
     function escapeMdLabel(s) {
         return String(s || '').replace(/]/g, '\\]').replace(/\n/g, ' ');
+    }
+
+    function generateAttachmentsMarkdown(item) {
+        const links = Array.isArray(item.attachments) ? item.attachments : [];
+        let content = '';
+        if (links.length > 0) {
+            content += `### ${t('attachments_section')}\n\n`;
+            for (const u of links) {
+                const label = escapeMdLabel(toFileName(u));
+                content += `- [${label}](<${u}>)\n`;
+            }
+            content += `\n`;
+        } else if (ATTACHMENT_COMBINED_FALLBACK && item.attachmentScanAttempted) {
+            content += `### ${t('attachments_section')}\n\n- ${t('attachments_link_unavailable')}\n\n`;
+        }
+        return content;
     }
 
     function convertResourcesToLinks(text) {
