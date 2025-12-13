@@ -29,14 +29,15 @@
 /* global JSZip */
 const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
 
-(function () {
-    'use strict';
+    (function () {
+        'use strict';
 
-    // 调试日志
-    console.log('[AI Studio Exporter] Script started');
-    console.log('[AI Studio Exporter] _JSZipRef:', _JSZipRef);
-    console.log('[AI Studio Exporter] typeof JSZip:', typeof JSZip);
-    console.log('[AI Studio Exporter] unsafeWindow.JSZip:', typeof unsafeWindow !== 'undefined' ? unsafeWindow.JSZip : 'unsafeWindow not available');
+        const DEBUG = false;
+        const dlog = (...args) => { if (DEBUG) console.log(...args); };
+        dlog('[AI Studio Exporter] Script started');
+        dlog('[AI Studio Exporter] _JSZipRef:', _JSZipRef);
+        dlog('[AI Studio Exporter] typeof JSZip:', typeof JSZip);
+        dlog('[AI Studio Exporter] unsafeWindow.JSZip:', typeof unsafeWindow !== 'undefined' ? unsafeWindow.JSZip : 'unsafeWindow not available');
 
     // ==========================================
     // 0. 国际化 (i18n)
@@ -722,7 +723,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         try {
             await showModeSelection();
         } catch (e) {
-            console.log('Export cancelled.');
+            dlog('Export cancelled.');
             // isRunning is still false here, so no cleanup needed
             return;
         }
@@ -738,7 +739,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
 
         // 移动端增强激活逻辑
         if (!scroller || scroller.scrollHeight <= scroller.clientHeight) {
-            console.log("尝试主动激活滚动容器...");
+            dlog("尝试主动激活滚动容器...");
             // 先尝试滚动 window
             window.scrollBy(0, 1);
             await sleep(100);
@@ -747,7 +748,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
 
         // 如果还是找不到，尝试触摸激活
         if (!scroller || scroller.scrollHeight <= scroller.clientHeight) {
-            console.log("尝试触摸激活...");
+            dlog("尝试触摸激活...");
             const bubble = document.querySelector('ms-chat-turn');
             if (bubble) {
                 bubble.scrollIntoView({ behavior: 'instant' });
@@ -766,29 +767,29 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         // ========================================
         // 智能跳转：使用滚动条按钮直接跳到第一个对话
         // ========================================
-        console.log("尝试使用滚动条按钮跳转到第一个对话...");
+        dlog("尝试使用滚动条按钮跳转到第一个对话...");
 
         // 查找所有对话轮次按钮
         const scrollbarButtons = document.querySelectorAll('button[id^="scrollbar-item-"]');
-        console.log(`找到 ${scrollbarButtons.length} 个对话轮次按钮`);
+        dlog(`找到 ${scrollbarButtons.length} 个对话轮次按钮`);
 
         if (scrollbarButtons.length > 0) {
             // 点击第一个按钮（最早的对话）
             const firstButton = scrollbarButtons[0];
-            console.log("点击第一个对话按钮:", firstButton.getAttribute('name') || firstButton.id);
+            dlog("点击第一个对话按钮:", firstButton.getAttribute('name') || firstButton.id);
             firstButton.click();
 
             // 等待跳转和渲染
             await sleep(1500);
-            console.log("跳转后 scrollTop:", scroller.scrollTop);
+            dlog("跳转后 scrollTop:", scroller.scrollTop);
         } else {
-            console.log("未找到滚动条按钮，使用备用方案...");
+            dlog("未找到滚动条按钮，使用备用方案...");
         }
 
         // 备用方案：如果按钮不存在或跳转失败，逐步向上滚动
         const initialScrollTop = scroller.scrollTop;
         if (initialScrollTop > 500) {
-            console.log("执行备用滚动方案，当前 scrollTop:", initialScrollTop);
+            dlog("执行备用滚动方案，当前 scrollTop:", initialScrollTop);
             let currentPos = initialScrollTop;
             let upwardAttempts = 0;
             const maxUpwardAttempts = 15; // 减少尝试次数
@@ -803,11 +804,11 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                 await sleep(500);
 
                 const newPos = scroller.scrollTop;
-                console.log(`向上滚动 ${upwardAttempts}/${maxUpwardAttempts}: ${currentPos} → ${newPos}`);
+                dlog(`向上滚动 ${upwardAttempts}/${maxUpwardAttempts}: ${currentPos} → ${newPos}`);
 
                 // 如果卡住了，尝试直接设置
                 if (Math.abs(newPos - currentPos) < 10) {
-                    console.log("检测到卡住，尝试直接设置...");
+                    dlog("检测到卡住，尝试直接设置...");
                     scroller.scrollTop = Math.max(0, currentPos - scrollAmount);
                     await sleep(300);
                 }
@@ -822,7 +823,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         }
 
         // 最终确保到达顶部
-        console.log("执行最终回到顶部，当前 scrollTop:", scroller.scrollTop);
+        dlog("执行最终回到顶部，当前 scrollTop:", scroller.scrollTop);
         scroller.scrollTop = 0;
         await sleep(500);
 
@@ -832,7 +833,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             await sleep(500);
         }
 
-        console.log("✓ 回到顶部完成，最终 scrollTop:", scroller.scrollTop);
+        dlog("✓ 回到顶部完成，最终 scrollTop:", scroller.scrollTop);
 
         // 等待 DOM 稳定
         await sleep(800);
@@ -858,7 +859,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                 if (Math.abs(currentScroll - lastScrollTop) <= 2) {
                     stuckCount++;
                     if (stuckCount >= 3) {
-                        console.log("判定到底", currentScroll);
+                        dlog("判定到底", currentScroll);
                         break;
                     }
                 } else {
@@ -987,9 +988,20 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     }
 
     function mergeWithOverlap(oldOrder, newIds) {
-        const idx = findLastCommonIdx(newIds, oldOrder);
-        const toAdd = idx !== -1 ? newIds.slice(idx + 1) : newIds;
-        return [...oldOrder, ...toAdd];
+        const oldIdSet = new Set(oldOrder);
+        const result = [...oldOrder];
+        newIds.forEach((newId, index) => {
+            if (!oldIdSet.has(newId)) {
+                let prevInOldIdx = -1;
+                for (let i = index - 1; i >= 0; i--) {
+                    const neighborId = newIds[i];
+                    const pos = result.indexOf(neighborId);
+                    if (pos !== -1) { prevInOldIdx = pos; break; }
+                }
+                result.splice(prevInOldIdx + 1, 0, newId);
+            }
+        });
+        return result;
     }
 
     function appendDisjointIds(oldOrder, newIds) {
