@@ -521,6 +521,16 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         return computeCounts(turnOrder, collectedData, false);
     }
 
+    function resetExportState() {
+        collectedData.clear();
+        turnOrder = [];
+        processedTurnIds.clear();
+        scannedAttachmentTurns.clear();
+        cachedExportBlob = null;
+        cancelRequested = false;
+        hasFinished = false;
+    }
+
     // 更新遮罩界面状态（支持多种流程状态）
     // Update overlay UI state (supports multiple workflow states)
     function updateUI(state, msg = "") {
@@ -717,13 +727,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     // Main export flow: mode select → countdown → capture → export
     async function startProcess() {
         if (isRunning) return;
-        // isRunning = true; // Moved to after mode selection
-        hasFinished = false;
-        collectedData.clear();
-        turnOrder = [];
-        processedTurnIds.clear();
-        cachedExportBlob = null;
-        cancelRequested = false;
+        resetExportState();
 
         autoFixFormFieldAttributes();
 
