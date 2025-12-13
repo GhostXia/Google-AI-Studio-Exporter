@@ -927,6 +927,34 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         return document.documentElement;
     }
 
+    function filterHref(href) {
+        if (!href) return false;
+        const lower = href.trim().toLowerCase();
+        if (lower === '#' || lower.startsWith('javascript:') || lower.startsWith('data:')) return false;
+        if (lower.startsWith('http')) return true;
+        if (ATTACHMENT_COMBINED_FALLBACK && lower.startsWith('blob:')) return true;
+        return false;
+    }
+
+    function extractDownloadLinksFromTurn(el) {
+        const links = [];
+        const icons = el.querySelectorAll('span.material-symbols-outlined, span.ms-button-icon-symbol');
+        icons.forEach(sp => {
+            const txt = (sp.textContent || '').trim().toLowerCase();
+            if (txt === 'download' || txt === '下载') {
+                const a = sp.closest('a') || sp.parentElement?.querySelector('a[href]');
+                const href = a?.getAttribute('href') || '';
+                if (filterHref(href)) links.push(href);
+            }
+        });
+        const anchors = el.querySelectorAll('a[href]');
+        anchors.forEach(a => {
+            const href = a.getAttribute('href') || '';
+            if (filterHref(href)) links.push(href);
+        });
+        return Array.from(new Set(links));
+    }
+
     async function captureData(scroller = document) {
         // Scope the query to the scroller container to avoid capturing elements from other parts of the page
         const turns = scroller.querySelectorAll('ms-chat-turn');
@@ -947,49 +975,19 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
 
         for (const turn of turns) {
             // Check if the element is visible (offsetParent is null for hidden elements)
-            if (turn.offsetParent === null || window.getComputedStyle(turn).visibility === 'hidden') return;
+            if (turn.offsetParent === null || window.getComputedStyle(turn).visibility === 'hidden') continue;
 
             const turnId = getTurnId(turn);
-            if (!turnId) return;
+            if (!turnId) continue;
 
             const role = (turn.querySelector('[data-turn-role="Model"]') || turn.querySelector('[class*="model-prompt-container"]')) ? ROLE_GEMINI : ROLE_USER;
             const existing = collectedData.get(turnId) || { role };
             const hasThoughtChunkNow = role === ROLE_GEMINI && !!turn.querySelector('ms-thought-chunk');
 
-            if (processedTurnIds.has(turnId) && !(role === ROLE_GEMINI && !existing.thoughts && hasThoughtChunkNow)) return;
+            if (processedTurnIds.has(turnId) && !(role === ROLE_GEMINI && !existing.thoughts && hasThoughtChunkNow)) continue;
 
             // Extract download links from the original turn before stripping UI-only elements
-            const extractDownloadLinks = (el) => {
-                const links = [];
-                const icons = el.querySelectorAll('span.material-symbols-outlined, span.ms-button-icon-symbol');
-                icons.forEach(sp => {
-                    const txt = (sp.textContent || '').trim().toLowerCase();
-                    if (txt === 'download') {
-                        let a = sp.closest('a');
-                        if (!a) {
-                            const parent = sp.parentElement;
-                            if (parent) a = parent.querySelector('a[href]');
-                        }
-                        if (a && a.href) {
-                            links.push(a.href);
-                        }
-                    }
-                });
-                const anchors = el.querySelectorAll('a[href]');
-                anchors.forEach(a => {
-                    const href = (a.getAttribute('href') || '').trim();
-                    const lower = href.toLowerCase();
-                    if (!href) return;
-                    if (lower.startsWith('data:')) return;
-                    if (lower.startsWith('javascript:')) return;
-                    if (href === '#') return;
-                    if (lower.startsWith('http') || (ATTACHMENT_COMBINED_FALLBACK && lower.startsWith('blob:'))) {
-                        links.push(href);
-                    }
-                });
-                return Array.from(new Set(links));
-            };
-            let dlLinks = extractDownloadLinks(turn);
+            let dlLinks = extractDownloadLinksFromTurn(turn);
             if (dlLinks.length > 0) {
                 const prev = existing.attachments || [];
                 existing.attachments = Array.from(new Set([...prev, ...dlLinks]));
@@ -1006,23 +1004,16 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                     const spans = document.querySelectorAll('span.material-symbols-outlined, span.ms-button-icon-symbol');
                     spans.forEach(sp => {
                         const txt = (sp.textContent || '').trim().toLowerCase();
-                        if (txt !== 'download') return;
-                        let a = sp.closest('a');
-                        if (!a) {
-                            const p = sp.parentElement;
-                            if (p) a = p.querySelector('a[href]');
-                        }
-                        if (a && a.href) {
+                        if (txt !== 'download' && txt !== '下载') return;
+                        const a = sp.closest('a') || sp.parentElement?.querySelector('a[href]');
+                        if (a) {
                             const r2 = a.getBoundingClientRect();
                             const cx1 = (r1.left + r1.right) / 2, cy1 = (r1.top + r1.bottom) / 2;
                             const cx2 = (r2.left + r2.right) / 2, cy2 = (r2.top + r2.bottom) / 2;
                             const dist = Math.hypot(cx1 - cx2, cy1 - cy2);
                             if (dist < ATTACHMENT_MAX_DIST) {
-                                const href = a.href;
-                                const lower = href.toLowerCase();
-                                if (!lower.startsWith('data:') && !lower.startsWith('javascript:') && (lower.startsWith('http') || (ATTACHMENT_COMBINED_FALLBACK && lower.startsWith('blob:')))) {
-                                    found.push(href);
-                                }
+                                const href = a?.getAttribute('href') || '';
+                                if (filterHref(href)) found.push(href);
                             }
                         }
                     });
@@ -1312,27 +1303,16 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             if (textOut.length > 0) {
                 const processedText = convertResourcesToLinks(textOut);
                 content += `## ${roleName}\n\n${processedText}\n\n`;
-                // Append attachment links captured from download buttons
                 const links = Array.isArray(item.attachments) ? item.attachments : [];
                 if (links.length > 0) {
-                    const nameFromUrl = (url) => {
-                        try {
-                            const u = new URL(url);
-                            const base = u.pathname.substring(u.pathname.lastIndexOf('/') + 1) || 'file';
-                            return decodeURIComponent(base);
-                        } catch (_) {
-                            const base = url.split('/').pop().split('?')[0] || 'file';
-                            try { return decodeURIComponent(base); } catch (_) { return base; }
-                        }
-                    };
                     content += `### ${t('attachments_section')}\n\n`;
                     for (const u of links) {
-                        const label = nameFromUrl(u);
-                        content += `- [${label}](${u})\n`;
+                        const label = escapeMdLabel(toFileName(u));
+                        content += `- [${label}](<${u}>)\n`;
                     }
                     content += `\n`;
                 } else if (ATTACHMENT_COMBINED_FALLBACK) {
-                    content += `### ${t('attachments_section')}\n\n- [${t('attachments_link_unavailable')}]\n\n`;
+                    content += `### ${t('attachments_section')}\n\n- ${t('attachments_link_unavailable')}\n\n`;
                 }
                 content += `---\n\n`;
             }
@@ -1540,24 +1520,50 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
 
             if (processedText.length > 0) {
                 content += `## ${roleName}\n\n${processedText}\n\n`;
+                const links = Array.isArray(item.attachments) ? item.attachments : [];
+                if (links.length > 0) {
+                    content += `### ${t('attachments_section')}\n\n`;
+                    for (const u of links) {
+                        const label = escapeMdLabel(toFileName(u));
+                        content += `- [${label}](<${u}>)\n`;
+                    }
+                    content += `\n`;
+                } else if (ATTACHMENT_COMBINED_FALLBACK) {
+                    content += `### ${t('attachments_section')}\n\n- ${t('attachments_link_unavailable')}\n\n`;
+                }
                 content += `---\n\n`;
+            } else {
+                const links = Array.isArray(item.attachments) ? item.attachments : [];
+                if (links.length > 0) {
+                    content += `### ${t('attachments_section')}\n\n`;
+                    for (const u of links) {
+                        const label = escapeMdLabel(toFileName(u));
+                        content += `- [${label}](<${u}>)\n`;
+                    }
+                    content += `\n---\n\n`;
+                }
             }
         }
 
         return content;
     }
 
+    function toFileName(url) {
+        try {
+            const u = new URL(url);
+            const base = u.pathname.substring(u.pathname.lastIndexOf('/') + 1) || 'file';
+            return decodeURIComponent(base);
+        } catch (_) {
+            const base = url.split('/').pop().split('?')[0] || 'file';
+            try { return decodeURIComponent(base); } catch (_) { return base; }
+        }
+    }
+
+    function escapeMdLabel(s) {
+        return String(s || '').replace(/]/g, '\\]').replace(/\n/g, ' ');
+    }
+
     function convertResourcesToLinks(text) {
-        const toFileName = (url) => {
-            try {
-                const u = new URL(url);
-                const base = u.pathname.substring(u.pathname.lastIndexOf('/') + 1) || 'file';
-                return decodeURIComponent(base);
-            } catch (_) {
-                const base = url.split('/').pop().split('?')[0] || 'file';
-                try { return decodeURIComponent(base); } catch (_) { return base; }
-            }
-        };
         const replacedImages = text.replace(IMG_REGEX, (match, alt, url) => {
             const name = (alt && alt.trim().length > 0) ? alt.trim() : toFileName(url);
             return `[${name}](${url})`;
