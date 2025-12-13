@@ -1558,13 +1558,27 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     }
 
     function toFileName(url) {
+        let base = 'file';
         try {
             const u = new URL(url);
-            const base = u.pathname.substring(u.pathname.lastIndexOf('/') + 1) || 'file';
+            base = u.pathname.substring(u.pathname.lastIndexOf('/') + 1) || 'file';
+            if (!base || base === 'file') {
+                const qp = new URLSearchParams(u.search);
+                const cand = qp.get('filename') || qp.get('file') || qp.get('name');
+                if (cand) base = cand;
+            }
+        } catch (_) {
+            base = url.split('/').pop().split('?')[0] || 'file';
+            if (!base || base === 'file') {
+                const m = String(url).match(/[?&](?:filename|file|name)=([^&]+)/i);
+                if (m) base = m[1];
+            }
+        }
+        base = String(base).replace(/^['"]+|['"]+$/g, '');
+        try {
             return decodeURIComponent(base);
         } catch (_) {
-            const base = url.split('/').pop().split('?')[0] || 'file';
-            try { return decodeURIComponent(base); } catch (_) { return base; }
+            return base;
         }
     }
 
