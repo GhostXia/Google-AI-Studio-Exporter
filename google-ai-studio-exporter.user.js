@@ -124,10 +124,10 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             'status_zip_missing': 'Could not load ZIP library. Fallback to text?',
             'btn_retry': 'Retry',
             'btn_cancel': 'Cancel',
-                'status_esc_hint': 'Press <b>ESC</b> to cancel and choose how to save',
-                'title_cancel': 'Export cancelled',
-                'status_cancel': 'Choose to continue attachments or save as text',
-                'banner_top': '📎 Attachments merged as Markdown links (Text-only export)'
+            'status_esc_hint': 'Press <b>ESC</b> to cancel and choose how to save',
+            'title_cancel': 'Export cancelled',
+            'status_cancel': 'Choose to continue attachments or save as text',
+            'banner_top': '📎 Attachments merged as Markdown links (Text-only export)'
             }
         };
 
