@@ -42,11 +42,11 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     // 0. 国际化 (i18n)
     // ==========================================
     const lang = navigator.language.startsWith('zh') ? 'zh' : 'en';
-    const translations = {
-        'zh': {
-            'btn_export': '🚀 导出',
-            'title_ready': '准备就绪',
-            'status_init': '初始化中...',
+        const translations = {
+            'zh': {
+                'btn_export': '🚀 导出',
+                'title_ready': '准备就绪',
+                'status_init': '初始化中...',
             'btn_save': '💾 保存',
             'btn_close': '关闭',
             'title_countdown': '准备开始',
@@ -81,14 +81,15 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             'status_zip_missing': '无法加载附件打包库。是否回退到纯文本？',
             'btn_retry': '重试',
             'btn_cancel': '取消',
-            'status_esc_hint': '按 <b>ESC</b> 可取消并选择保存方式',
-            'title_cancel': '已取消导出',
-            'status_cancel': '请选择继续打包附件或改为纯文本保存'
-        },
-        'en': {
-            'btn_export': '🚀 Export',
-            'title_ready': 'Ready',
-            'status_init': 'Initializing...',
+                'status_esc_hint': '按 <b>ESC</b> 可取消并选择保存方式',
+                'title_cancel': '已取消导出',
+                'status_cancel': '请选择继续打包附件或改为纯文本保存',
+                'banner_top': '📎 附件已合并为 Markdown 链接（纯文本导出）'
+            },
+            'en': {
+                'btn_export': '🚀 Export',
+                'title_ready': 'Ready',
+                'status_init': 'Initializing...',
             'btn_save': '💾 Save',
             'btn_close': 'Close',
             'title_countdown': 'Get Ready',
@@ -123,11 +124,12 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             'status_zip_missing': 'Could not load ZIP library. Fallback to text?',
             'btn_retry': 'Retry',
             'btn_cancel': 'Cancel',
-            'status_esc_hint': 'Press <b>ESC</b> to cancel and choose how to save',
-            'title_cancel': 'Export cancelled',
-            'status_cancel': 'Choose to continue attachments or save as text'
-        }
-    };
+                'status_esc_hint': 'Press <b>ESC</b> to cancel and choose how to save',
+                'title_cancel': 'Export cancelled',
+                'status_cancel': 'Choose to continue attachments or save as text',
+                'banner_top': '📎 Attachments merged as Markdown links (Text-only export)'
+            }
+        };
 
     function t(key, params = {}) {
         let str = translations[lang][key] || key;
@@ -187,6 +189,14 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             margin-bottom: 16px; 
             color: #202124;
             letter-spacing: -0.5px;
+        }
+        .ai-banner {
+            background: #fff7cd;
+            color: #5f6368;
+            padding: 10px 12px;
+            border-radius: 10px;
+            margin-bottom: 14px;
+            font-size: 13px;
         }
         
         .ai-status { 
@@ -442,6 +452,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         overlay.innerHTML = `
             <div id="ai-box">
                 <div class="ai-title">${t('title_ready')}</div>
+                <div class="ai-banner">${t('banner_top')}</div>
                 <div class="ai-status">${t('status_init')}</div>
                 <div class="ai-count">0</div>
                 <div class="ai-btn-container">

@@ -27,6 +27,7 @@ This UserScript solves the problem of "Virtual Scrolling" in Google AI Studio, a
 *   **🛡️ Active Detection**: Works perfectly even on fresh page loads (no manual scrolling needed).
 *   **🧹 Clean Output**: Removes UI garbage (buttons, icons, "Run/Edit" text) and keeps only the dialogue.
 *   **🎨 Interactive UI**: Beautiful overlay with progress tracking, countdown, and status indicators.
+*   **📎 Attachment Links**: When ZIP packaging is unavailable due to CSP, attachments are merged into Markdown as clickable links; top banner informs the policy and the “With Attachments” button is disabled with a hint.
 *   **🔒 Safety Lock**: Prevents double-downloads and allows emergency stop via `ESC` key.
 
 ### 📦 Installation
@@ -42,7 +43,7 @@ This UserScript solves the problem of "Virtual Scrolling" in Google AI Studio, a
 1.  Click the **Export Button** on the top right corner.
 2.  Wait for the **3-second countdown** (Do not touch your mouse!).
 3.  The script will **automatically scroll** to the top and then down to capture all messages.
-4.  Once finished, a `.txt` file will be downloaded automatically.
+4.  Once finished, a `.md` file will be downloaded automatically.
 
 > **Tip**: Press `ESC` key at any time to stop scrolling and save what has been captured so far.
 
@@ -78,6 +79,7 @@ Here is the analysis of the code...
 *   **🛡️ 主动探测机制**：v14内核，解决冷启动找不到滚动条的问题。
 *   **🧹 数据清洗**：自动去除按钮、图标、引用来源等干扰信息，只保留纯净文本。
 *   **🎨 交互式 UI**：带有倒计时、进度显示和状态提示的漂亮界面。
+*   **📎 附件链接**：在 CSP 限制下不再打包 ZIP，附件将以可点击链接整合进 Markdown；顶部横幅提示该策略，模式选择界面“包含附件”按钮禁用并显示“（已合并至纯文本）”。
 *   **🔒 安全机制**：防止重复下载，支持按 `ESC` 键随时中断并保存。
 
 ### 📦 安装方法
@@ -93,7 +95,7 @@ Here is the analysis of the code...
 1.  点击右上角的 **导出按钮**。
 2.  等待 **3秒倒计时**（请勿操作鼠标！）。
 3.  脚本将 **自动滚动** 到顶部，然后向下滚动以抓取所有消息。
-4.  完成后，会自动下载一个 `.txt` 文件。
+4.  完成后，会自动下载一个 `.md` 文件。
 
 > **提示**：随时按 `ESC` 键可停止滚动并保存已抓取的内容。
 
@@ -126,3 +128,16 @@ Here is the analysis of the code...
 ## 📜 License
 
 AGPL-3.0 License
+### 📎 Attachments Handling
+
+- Due to strict site CSP policies, dynamic script injection is disabled; packaging attachments into a ZIP may be unavailable.
+- The exporter now consolidates attachments into the Markdown as clickable links, e.g. `[image.jpg](https://...)` and `[file.pdf](https://...)`.
+- In the mode selection UI, the “📦 With Attachments” button is disabled and shows “(merged into text only)”. Choose “📄 Text Only” to export with embedded links.
+- Press `ESC` during packaging to cancel and save the current progress.
+
+### 📎 附件处理说明
+
+- 由于站点 CSP 策略严格，禁止动态脚本注入；附件打包 ZIP 在多数环境下不可用。
+- 现已将附件“以链接形式”整合进 Markdown，如 `[image.jpg](https://...)`、`[file.pdf](https://...)`，点击即可访问原文件。
+- 在模式选择界面，“📦 包含附件”按钮已禁用，后方显示“（已合并至纯文本）”。请选择“📄 纯文本”进行导出。
+- 打包阶段可按 `ESC` 取消并保存当前进度。
