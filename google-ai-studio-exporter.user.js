@@ -85,7 +85,9 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             'status_esc_hint': '按 <b>ESC</b> 可取消并选择保存方式',
             'title_cancel': '已取消导出',
             'status_cancel': '请选择继续打包附件或改为纯文本保存',
-            'banner_top': '📎 附件已合并为 Markdown 链接（纯文本导出）'
+            'banner_top': '📎 附件已合并为 Markdown 链接（纯文本导出）',
+            'attachments_section': '附件',
+            'attachments_link_unavailable': '链接不可用'
             },
             'en': {
                 'btn_export': '🚀 Export',
@@ -128,7 +130,9 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             'status_esc_hint': 'Press <b>ESC</b> to cancel and choose how to save',
             'title_cancel': 'Export cancelled',
             'status_cancel': 'Choose to continue attachments or save as text',
-            'banner_top': '📎 Attachments merged as Markdown links (Text-only export)'
+            'banner_top': '📎 Attachments merged as Markdown links (Text-only export)',
+            'attachments_section': 'Attachments',
+            'attachments_link_unavailable': 'link unavailable'
             }
         };
 
@@ -1321,14 +1325,14 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                             try { return decodeURIComponent(base); } catch (_) { return base; }
                         }
                     };
-                    content += `### Attachments\n\n`;
+                    content += `### ${t('attachments_section')}\n\n`;
                     for (const u of links) {
                         const label = nameFromUrl(u);
                         content += `- [${label}](${u})\n`;
                     }
                     content += `\n`;
                 } else if (ATTACHMENT_COMBINED_FALLBACK) {
-                    content += `### Attachments\n\n- [link unavailable]\n\n`;
+                    content += `### ${t('attachments_section')}\n\n- [${t('attachments_link_unavailable')}]\n\n`;
                 }
                 content += `---\n\n`;
             }
