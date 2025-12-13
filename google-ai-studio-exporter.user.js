@@ -420,6 +420,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     let exportMode = null; // 'full' or 'text'
     let cachedExportBlob = null;
     let cancelRequested = false;
+    let isHandlingEscape = false;
     const EMBED_JSZIP_BASE64 = '';
     const DISABLE_SCRIPT_INJECTION = true;
     const JSZIP_URLS = [
@@ -1166,7 +1167,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                     if (nextItem.role === ROLE_USER) break;
                     if (nextItem.role === ROLE_GEMINI && nextItem.text) {
                         nextItem.thoughts = nextItem.thoughts
-                            ? (nextItem.thoughts + '\n\n' + item.thoughts)
+                            ? (item.thoughts + '\n\n' + nextItem.thoughts)
                             : item.thoughts;
                         collectedData.set(nextId, nextItem);
                         merged = true;
@@ -1195,7 +1196,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     // Helper: Download text-only mode
     // 仅文本导出：生成 Markdown 并下载
     // Text-only export: generate Markdown and download
-    function downloadTextOnly() {
+    async function downloadTextOnly() {
         let content = `# ${t('file_header')}` + "\n\n";
         content += `**${t('file_time')}:** ${new Date().toLocaleString()}` + "\n\n";
         content += `**${t('file_turns')}:** ${turnOrder.length}` + "\n\n";
@@ -1222,6 +1223,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
         cachedExportBlob = blob;
         downloadBlob(blob, `Gemini_Chat_v14_${Date.now()}.md`);
+        return;
     }
 
     // Generic Helper: Process resources (images or files)
@@ -1253,12 +1255,17 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                 }
             });
 
+            let cancelIntervalId = null;
             const cancelWatcher = new Promise(resolve => {
-                const timer = setInterval(() => {
-                    if (cancelRequested) { clearInterval(timer); resolve(); }
+                cancelIntervalId = setInterval(() => {
+                    if (cancelRequested) { clearInterval(cancelIntervalId); resolve(); }
                 }, 200);
             });
-            await Promise.race([Promise.all(promises), cancelWatcher]);
+            try {
+                await Promise.race([Promise.all(promises), cancelWatcher]);
+            } finally {
+                if (cancelIntervalId) clearInterval(cancelIntervalId);
+            }
         }
         return resourceMap;
     }
@@ -1679,24 +1686,29 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     // 全局 ESC 处理：弹出取消提示并根据选择继续或回退
     // Global ESC handler: show cancel prompt and proceed based on choice
     document.addEventListener('keydown', async e => {
-        if (e.key === 'Escape' && isRunning) {
+        if (e.key !== 'Escape') return;
+        if (!isRunning || isHandlingEscape) return;
+        isHandlingEscape = true;
+        try {
             cancelRequested = true;
             const choice = await showCancelPrompt();
             if (choice === 'text') {
                 normalizeConversation();
                 exportMode = 'text';
-                try { await downloadTextOnly(); } catch (_) { }
+                try { await downloadTextOnly(); } catch (err) { debugLog('Text export failed: ' + (err && err.message ? err.message : 'error'), 'error'); }
                 updateUI('FINISHED', collectedData.size);
                 isRunning = false;
             } else if (choice === 'retry') {
                 cancelRequested = false;
                 exportMode = 'full';
                 isRunning = true;
-                try { await downloadCollectedData(); } catch (_) { }
+                try { await downloadCollectedData(); } catch (err) { debugLog('Retry export failed: ' + (err && err.message ? err.message : 'error'), 'error'); }
             } else {
                 isRunning = false;
                 overlay.style.display = 'none';
             }
+        } finally {
+            isHandlingEscape = false;
         }
     });
 
