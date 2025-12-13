@@ -431,6 +431,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     const ATTACHMENT_COMBINED_FALLBACK = true;
     const ATTACHMENT_MAX_DIST = 160;
     const scannedAttachmentTurns = new Set();
+    const ATTACHMENT_SCAN_CONCURRENCY = 3;
     const JSZIP_URLS = [
         'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
         'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.js',
@@ -938,6 +939,28 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
 
     function extractDownloadLinksFromTurn(el) {
         const links = [];
+        const isDownloadish = (href, a) => {
+            if (!href) return false;
+            const h = href.toLowerCase();
+            const hasDownloadAttr = !!(a && a.getAttribute('download'));
+            const tokenMatch = h.includes('/download') || h.includes('download=true') || h.includes('/dl/');
+            const extMatch = /(\.zip|\.pdf|\.png|\.jpe?g|\.gif|\.webp|\.mp4|\.mov|\.tgz|\.tar\.gz|\.exe|\.rar|\.7z|\.csv|\.txt|\.json|\.md|\.xlsx|\.docx)(?:$|[?#])/i.test(h);
+            let hostMatch = false;
+            try {
+                const u = new URL(href);
+                const host = u.hostname.toLowerCase();
+                hostMatch = [
+                    's3.amazonaws.com',
+                    'googleapis.com',
+                    'storage.googleapis.com',
+                    'drive.google.com',
+                    'blob.core.windows.net',
+                    'googleusercontent.com'
+                ].some(domain => host.includes(domain));
+            } catch (_) {}
+            const schemeMatch = h.startsWith('blob:') || h.startsWith('data:');
+            return hasDownloadAttr || tokenMatch || extMatch || hostMatch || schemeMatch;
+        };
         const icons = el.querySelectorAll('span.material-symbols-outlined, span.ms-button-icon-symbol');
         icons.forEach(sp => {
             const txt = (sp.textContent || '').trim().toLowerCase();
@@ -950,7 +973,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         const anchors = el.querySelectorAll('a[href]');
         anchors.forEach(a => {
             const href = a.getAttribute('href') || '';
-            if (filterHref(href)) links.push(href);
+            if (isDownloadish(href, a) && filterHref(href)) links.push(href);
         });
         return Array.from(new Set(links));
     }
@@ -994,14 +1017,15 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             }
 
             if ((!existing.attachments || existing.attachments.length === 0) && !scannedAttachmentTurns.has(turnId)) {
-                const imgs = turn.querySelectorAll('img');
+                const imgs = Array.from(turn.querySelectorAll('img'));
                 const found = [];
-                for (const img of imgs) {
+                existing.attachmentScanAttempted = true;
+                const scanImg = async (img) => {
                     const r1 = img.getBoundingClientRect();
                     img.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
                     img.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-                    await sleep(200);
-                    const spans = document.querySelectorAll('span.material-symbols-outlined, span.ms-button-icon-symbol');
+                    await sleep(80);
+                    const spans = turn.querySelectorAll('span.material-symbols-outlined, span.ms-button-icon-symbol');
                     spans.forEach(sp => {
                         const txt = (sp.textContent || '').trim().toLowerCase();
                         if (txt !== 'download' && txt !== '下载') return;
@@ -1018,7 +1042,15 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                         }
                     });
                     img.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
-                }
+                };
+                const queue = imgs.slice();
+                const workers = Array.from({ length: Math.min(queue.length, ATTACHMENT_SCAN_CONCURRENCY) }, async () => {
+                    while (queue.length) {
+                        const img = queue.shift();
+                        await scanImg(img);
+                    }
+                });
+                if (workers.length > 0) await Promise.all(workers);
                 if (found.length > 0) {
                     const prev = existing.attachments || [];
                     existing.attachments = Array.from(new Set([...prev, ...found]));
@@ -1046,7 +1078,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                 existing.text = text;
             }
 
-            if (existing.text || existing.thoughts) {
+            if (existing.text || existing.thoughts || (Array.isArray(existing.attachments) && existing.attachments.length > 0)) {
                 collectedData.set(turnId, existing);
                 if (role === ROLE_USER || (role === ROLE_GEMINI && !!existing.text)) {
                     processedTurnIds.add(turnId);
@@ -1311,7 +1343,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                         content += `- [${label}](<${u}>)\n`;
                     }
                     content += `\n`;
-                } else if (ATTACHMENT_COMBINED_FALLBACK) {
+                } else if (ATTACHMENT_COMBINED_FALLBACK && item.attachmentScanAttempted) {
                     content += `### ${t('attachments_section')}\n\n- ${t('attachments_link_unavailable')}\n\n`;
                 }
                 content += `---\n\n`;
@@ -1528,7 +1560,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                         content += `- [${label}](<${u}>)\n`;
                     }
                     content += `\n`;
-                } else if (ATTACHMENT_COMBINED_FALLBACK) {
+                } else if (ATTACHMENT_COMBINED_FALLBACK && item.attachmentScanAttempted) {
                     content += `### ${t('attachments_section')}\n\n- ${t('attachments_link_unavailable')}\n\n`;
                 }
                 content += `---\n\n`;
