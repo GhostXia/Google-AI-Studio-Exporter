@@ -961,7 +961,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                     'blob.core.windows.net',
                     'googleusercontent.com'
                 ].some(domain => host.includes(domain));
-            } catch (_) {}
+} catch (e) { dlog(`无法解析用于主机匹配的 URL: ${href}`, e); }
             const schemeMatch = h.startsWith('blob:') || h.startsWith('data:');
             return hasDownloadAttr || tokenMatch || extMatch || hostMatch || schemeMatch;
         };
