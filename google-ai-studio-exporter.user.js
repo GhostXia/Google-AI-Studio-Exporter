@@ -229,6 +229,11 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             flex: 1;
             max-width: 150px;
         }
+        .ai-btn[disabled] {
+            opacity: 0.6;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
         
         .ai-btn-secondary {
             background: linear-gradient(135deg, #5f6368 0%, #3c4043 100%);
@@ -250,6 +255,11 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         .ai-red { 
             color: #d93025; 
             font-weight: 700; 
+        }
+        .ai-hint {
+            color: #5f6368;
+            font-size: 13px;
+            align-self: center;
         }
 
         /* 悬浮按钮 - PC 默认样式 */
@@ -560,12 +570,18 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                 btn.textContent = text;
                 btn.onclick = onClick;
                 btnContainer.appendChild(btn);
+                return btn;
             };
 
-            createModeButton('ai-mode-full', t('btn_mode_full'), true, () => {
+            const fullBtn = createModeButton('ai-mode-full', t('btn_mode_full'), true, () => {
                 exportMode = 'full';
                 resolve('full');
             });
+            fullBtn.disabled = true;
+            const fullHint = document.createElement('span');
+            fullHint.className = 'ai-hint';
+            fullHint.textContent = '（已合并至纯文本）';
+            btnContainer.appendChild(fullHint);
 
             createModeButton('ai-mode-text', t('btn_mode_text'), false, () => {
                 exportMode = 'text';
@@ -1179,13 +1195,15 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             const item = collectedData.get(id);
             if (!item) continue;
             if (item.role === ROLE_GEMINI && item.thoughts) {
-                content += `## ${t('role_thoughts')}\n\n${item.thoughts}\n\n`;
+                const processedThoughts = convertResourcesToLinks(item.thoughts || '');
+                content += `## ${t('role_thoughts')}\n\n${processedThoughts}\n\n`;
                 content += `---\n\n`;
             }
             const roleName = getRoleName(item.role);
             const textOut = (item.text || '').trim();
             if (textOut.length > 0) {
-                content += `## ${roleName}\n\n${textOut}\n\n`;
+                const processedText = convertResourcesToLinks(textOut);
+                content += `## ${roleName}\n\n${processedText}\n\n`;
                 content += `---\n\n`;
             }
         }
@@ -1391,6 +1409,28 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         }
 
         return content;
+    }
+
+    function convertResourcesToLinks(text) {
+        const toFileName = (url) => {
+            try {
+                const u = new URL(url);
+                const base = u.pathname.substring(u.pathname.lastIndexOf('/') + 1) || 'file';
+                return decodeURIComponent(base);
+            } catch (_) {
+                const base = url.split('/').pop().split('?')[0] || 'file';
+                try { return decodeURIComponent(base); } catch (_) { return base; }
+            }
+        };
+        const replacedImages = text.replace(IMG_REGEX, (match, alt, url) => {
+            const name = (alt && alt.trim().length > 0) ? alt.trim() : toFileName(url);
+            return `[${name}](${url})`;
+        });
+        const replacedLinks = replacedImages.replace(LINK_REGEX, (match, textLabel, url) => {
+            const name = (textLabel && textLabel.trim().length > 0) ? textLabel.trim() : toFileName(url);
+            return `[${name}](${url})`;
+        });
+        return replacedLinks;
     }
 
     // 获取 JSZip：优先使用 IIFE 外部捕获的引用
