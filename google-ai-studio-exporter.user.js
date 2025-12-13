@@ -951,6 +951,31 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
 
             if (processedTurnIds.has(turnId) && !(role === ROLE_GEMINI && !existing.thoughts && hasThoughtChunkNow)) return;
 
+            // Extract download links from the original turn before stripping UI-only elements
+            const extractDownloadLinks = (el) => {
+                const links = [];
+                const icons = el.querySelectorAll('span.material-symbols-outlined, span.ms-button-icon-symbol');
+                icons.forEach(sp => {
+                    const txt = (sp.textContent || '').trim().toLowerCase();
+                    if (txt === 'download') {
+                        let a = sp.closest('a');
+                        if (!a) {
+                            const parent = sp.parentElement;
+                            if (parent) a = parent.querySelector('a[href]');
+                        }
+                        if (a && a.href) {
+                            links.push(a.href);
+                        }
+                    }
+                });
+                return Array.from(new Set(links));
+            };
+            const dlLinks = extractDownloadLinks(turn);
+            if (dlLinks.length > 0) {
+                const prev = existing.attachments || [];
+                existing.attachments = Array.from(new Set([...prev, ...dlLinks]));
+            }
+
             const clone = turn.cloneNode(true);
             const trash = ['.actions-container', '.turn-footer', 'button', 'mat-icon', 'ms-grounding-sources', 'ms-search-entry-point', '.role-label', '.ms-role-tag', 'svg', '.author-label'];
             trash.forEach(s => clone.querySelectorAll(s).forEach(e => e.remove()));
@@ -1228,6 +1253,26 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             if (textOut.length > 0) {
                 const processedText = convertResourcesToLinks(textOut);
                 content += `## ${roleName}\n\n${processedText}\n\n`;
+                // Append attachment links captured from download buttons
+                const links = Array.isArray(item.attachments) ? item.attachments : [];
+                if (links.length > 0) {
+                    const nameFromUrl = (url) => {
+                        try {
+                            const u = new URL(url);
+                            const base = u.pathname.substring(u.pathname.lastIndexOf('/') + 1) || 'file';
+                            return decodeURIComponent(base);
+                        } catch (_) {
+                            const base = url.split('/').pop().split('?')[0] || 'file';
+                            try { return decodeURIComponent(base); } catch (_) { return base; }
+                        }
+                    };
+                    content += `### Attachments\n\n`;
+                    for (const u of links) {
+                        const label = nameFromUrl(u);
+                        content += `- [${label}](${u})\n`;
+                    }
+                    content += `\n`;
+                }
                 content += `---\n\n`;
             }
         }
