@@ -137,9 +137,65 @@ AGPL-3.0 License
 - In the mode selection UI, the “📦 With Attachments” button is disabled. Choose “📄 Text Only” to export a Markdown file with embedded links for attachments.
 - Press `ESC` during packaging to cancel and save the current progress.
 
+### 🔗 Link Normalization & Safety
+
+- Supports relative URLs from SPA contexts; every `href` is normalized using `new URL(href, window.location.href)`.
+- Filters protocols simply and predictably: allows `http:`/`https:` (`blob:` allowed when fallback is enabled), rejects `#`/invalid URLs.
+- Hardens hostname checks: `host === domain || host.endsWith('.' + domain)` to avoid false positives like `evil-googleapis.com`.
+- Extracted links are deduplicated and kept as absolute URLs in the final Markdown.
+- Each export starts with a fresh scan state; attachment hover-scan markers are reset to avoid skipping turns from a previous run.
+
+### ⚙️ Configuration
+
+- `ATTACHMENT_COMBINED_FALLBACK`: When `true`, shows an attachments section with “link unavailable” only if a scan was attempted but found nothing.
+- `ATTACHMENT_MAX_DIST`: Pixel threshold to associate a download icon with a hovered image (UI proximity heuristic).
+- `normalizeHref(href)`: Internally normalizes any `href` to an absolute URL; invalid or `#` are ignored.
+- Attachment scanning is performed per turn; images are hovered to reveal download icons and collect stable links.
+
+### 🛠 Troubleshooting
+
+- If some attachment links are missing in long chats, use the text-only export; all resources embedded in text are converted to clickable links.
+- In strict CSP environments, ZIP packaging is disabled by design; attachments appear as Markdown links instead.
+- For SPAs with unconventional link patterns, normalization ensures consistent absolute URLs; verify final Markdown if custom routers are used.
+
+### 🧾 Changelog (1.5.0)
+
+- Unified attachment rendering via `generateAttachmentsMarkdown()` with improved label escaping.
+- Added robust link normalization and hardened hostname matching.
+- Reset export scan state at start to avoid skipping previously scanned turns.
+- Refactored resource file name extraction with query-parameter fallback and decoding.
+
 ### 📎 附件处理说明
 
 - 由于站点 CSP 策略严格，禁止动态脚本注入；附件打包 ZIP 在多数环境下不可用。
 - 现已将附件“以链接形式”整合进 Markdown，如 `[image.jpg](https://...)`、`[file.pdf](https://...)`，点击即可访问原文件。
 - 在模式选择界面，“📦 包含附件”按钮已禁用，后方显示“（已合并至纯文本）”。请选择“📄 纯文本”进行导出。
 - 打包阶段可按 `ESC` 取消并保存当前进度。
+
+### 🔗 链接规范化与安全
+
+- 支持 SPA 中的相对链接；所有 `href` 通过 `new URL(href, window.location.href)` 规范化为绝对地址。
+- 协议过滤简洁明确：允许 `http:`/`https:`（在启用回退时允许 `blob:`），拒绝 `#`/无效地址。
+- 域名校验加固：使用 `host === domain` 或 `host.endsWith('.' + domain)`，避免 `evil-googleapis.com` 等伪装误判。
+- 抽取的链接去重并以绝对地址写入最终 Markdown。
+- 每次导出都会重置扫描状态；避免由于上次运行的缓存而跳过附件扫描。
+
+### ⚙️ 配置项
+
+- `ATTACHMENT_COMBINED_FALLBACK`：为 `true` 时，仅在本回合尝试过附件扫描但未发现链接时，显示“链接不可用”占位。
+- `ATTACHMENT_MAX_DIST`：用于将图片与下载图标建立关联的距离阈值（像素）。
+- `normalizeHref(href)`：内部将任意 `href` 规范化为绝对地址；无效或 `#` 将忽略。
+- 每个回合都会分别进行图片 hover 扫描，以收集稳定的下载链接。
+
+### 🛠 故障排查
+
+- 若长会话中出现个别附件链接缺失，建议选择“纯文本导出”，脚本会将文本中的所有资源转换为可点击链接。
+- 在严格 CSP 环境中，ZIP 打包被设计为禁用；附件已统一以 Markdown 链接形式呈现。
+- 对于使用自定义路由的 SPA，规范化逻辑可确保生成绝对地址；如有特殊情况，请检查最终 Markdown。
+
+### 🧾 变更记录（1.5.0）
+
+- 通过 `generateAttachmentsMarkdown()` 统一附件渲染，并改进标签转义。
+- 增强链接规范化与域名校验，避免伪造域名误判。
+- 在导出开始时重置扫描状态，避免跳过已扫描回合。
+- 改进文件名提取，支持查询参数回退并统一解码。
