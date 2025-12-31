@@ -1594,6 +1594,22 @@ function isResponseTurn(turn) {
     // ==========================================
     // 导出主流程：模式选择 → 倒计时 → 采集 → 导出
     // Main export flow: mode select → countdown → capture → export
+    async function processXHRData() {
+        console.log("[AI Studio Exporter] 开始处理 XHR 数据...");
+        
+        // 检查 XHR 数据是否可用
+        if (!capturedChatData) {
+            console.log("[AI Studio Exporter] 没有捕获到 XHR 数据");
+            return false;
+        }
+        
+        const history = findHistoryRecursive(capturedChatData);
+        if (!history || history.length === 0) {
+            console.log("[AI Studio Exporter] 未找到聊天历史");
+            return false;
+        }
+        
+        console.log(`[AI Studio Exporter] 找到 ${history.length} 个聊天回合`);
 
         let processedCount = 0;
         const newTurnOrder = [];
@@ -1654,13 +1670,10 @@ function isResponseTurn(turn) {
         // Update global turnOrder
         turnOrder.length = 0;
         turnOrder.push(...newTurnOrder);
-<<<<<<< HEAD
         updateUI('SCROLLING', collectedData.size);
 
         return true;
     }
-=======
->>>>>>> c1becfe96eca095bf9bb6b3d6293e4cd1593eda9
 
     async function startProcess() {
         if (isRunning) return;
