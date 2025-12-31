@@ -143,17 +143,17 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             'title_cancel': 'Export cancelled',
             'status_cancel': 'Choose to continue attachments or save as text',
             'banner_top': '📎 Attachments merged as Markdown links (Text-only export)',
-                'attachments_section': 'Attachments',
-                'attachments_link_unavailable': 'link unavailable',
-                'settings_title': 'Export Options',
-                'settings_include_user': 'Include User Messages',
-                'settings_include_model': 'Include Model Responses',
-                'settings_include_thinking': 'Include Thinking',
-                'settings_collapsible_thinking': 'Collapsible Thinking',
-                'settings_extraction_method': 'Extraction Method',
-                'settings_xhr': 'XHR',
-                'settings_dom': 'DOM',
-                'settings_tooltip': 'XHR: Instant capture via network (recommended)\nDOM: Scrolls through UI to extract (fallback)'
+            'attachments_section': 'Attachments',
+            'attachments_link_unavailable': 'link unavailable',
+            'settings_title': 'Export Options',
+            'settings_include_user': 'Include User Messages',
+            'settings_include_model': 'Include Model Responses',
+            'settings_include_thinking': 'Include Thinking',
+            'settings_collapsible_thinking': 'Collapsible Thinking',
+            'settings_extraction_method': 'Extraction Method',
+            'settings_xhr': 'XHR',
+            'settings_dom': 'DOM',
+            'settings_tooltip': 'XHR: Instant capture via network (recommended)\nDOM: Scrolls through UI to extract (fallback)'
             }
         };
 
