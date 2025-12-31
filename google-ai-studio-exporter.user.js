@@ -487,6 +487,197 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
 
 
     // ==========================================
+    // 3.5 Styles (Restored from V1.4.0)
+    // ==========================================
+    const style = document.createElement('style');
+    style.textContent = `
+        /* Global Overlay */
+        #ai-overlay-v14 {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.85); z-index: 2147483647;
+            display: flex; justify-content: center; align-items: center;
+            font-family: 'Google Sans', Roboto, -apple-system, sans-serif;
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            animation: ai-fade-in 0.2s ease-out;
+        }
+        
+        @keyframes ai-fade-in {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        /* Main Box */
+        #ai-box {
+            background: white; 
+            padding: 32px; 
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            width: 90%; 
+            max-width: 480px;
+            text-align: center; 
+            position: relative;
+            animation: ai-slide-up 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        
+        @keyframes ai-slide-up {
+            from { transform: translateY(30px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .ai-title { 
+            font-size: 26px; 
+            font-weight: 700; 
+            margin-bottom: 16px; 
+            color: #202124;
+            letter-spacing: -0.5px;
+        }
+
+        .ai-banner {
+            background: #e8f0fe;
+            color: #1967d2;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            margin-bottom: 16px;
+            display: none; /* Hidden by default */
+        }
+        
+        .ai-status { 
+            font-size: 15px; 
+            margin-bottom: 24px; 
+            line-height: 1.7; 
+            color: #5f6368; 
+        }
+        
+        .ai-count { 
+            font-size: 14px; 
+            font-weight: 600; 
+            color: #5f6368; 
+            margin-top: 8px;
+            line-height: 1.6;
+            white-space: pre-line;
+        }
+        
+        .ai-btn-container {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .ai-btn {
+            background: linear-gradient(135deg, #1a73e8 0%, #1557b0 100%);
+            color: white; 
+            border: none; 
+            padding: 12px 24px;
+            border-radius: 12px; 
+            cursor: pointer; 
+            font-size: 15px; 
+            font-weight: 600;
+            display: inline-block;
+            box-shadow: 0 4px 12px rgba(26, 115, 232, 0.3);
+            transition: all 0.2s ease;
+            min-width: 100px;
+        }
+        
+        .ai-btn-secondary {
+            background: linear-gradient(135deg, #5f6368 0%, #3c4043 100%);
+        }
+        
+        .ai-btn-secondary:hover {
+            background: linear-gradient(135deg, #4a4d51 0%, #2d3033 100%);
+        }
+        
+        .ai-btn:hover { 
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(26, 115, 232, 0.4);
+        }
+        
+        .ai-btn:active {
+            transform: translateY(0);
+        }
+
+        .ai-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
+        
+        .ai-red { 
+            color: #d93025; 
+            font-weight: 700; 
+        }
+
+        .ai-hint {
+            font-size: 12px;
+            color: #888;
+            margin-top: 4px;
+            width: 100%;
+        }
+
+        /* Floating Entry Button */
+        .ai-entry {
+            position: fixed; 
+            z-index: 2147483646;
+            padding: 14px 28px;
+            background: linear-gradient(135deg, #1a73e8 0%, #1557b0 100%);
+            color: white;
+            border: none;
+            border-radius: 50px; 
+            cursor: pointer;
+            box-shadow: 0 6px 20px rgba(26, 115, 232, 0.4);
+            font-weight: 700;
+            font-size: 15px;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            bottom: 20px; 
+            right: 20px;
+            letter-spacing: -0.3px;
+            user-select: none;
+        }
+        
+        .ai-entry:hover { 
+            transform: scale(1.08) translateY(-2px);
+            box-shadow: 0 8px 24px rgba(26, 115, 232, 0.5);
+        }
+
+        #ai-exporter-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background-color: #ea4335;
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            #ai-box { padding: 24px 20px; }
+            .ai-title { font-size: 20px; }
+            .ai-entry { padding: 12px 20px; font-size: 14px; bottom: 80px; }
+        }
+
+        /* Dark Mode */
+        @media (prefers-color-scheme: dark) {
+            #ai-overlay-v14 { background: rgba(0, 0, 0, 0.92); }
+            #ai-box { background: #202124; color: #e8eaed; }
+            .ai-title { color: #e8eaed; }
+            .ai-status { color: #9aa0a6; }
+        }
+    \`;
+    document.head.appendChild(style);
+
+    // ==========================================
     // 4. UIManager
     // ==========================================
     const UIManager = {
@@ -508,7 +699,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             this.overlay = document.createElement('div');
             this.overlay.id = 'ai-overlay-v14';
             this.overlay.innerHTML = `
-            <div id="ai-box">
+        < div id = "ai-box" >
                 <div class="ai-title">${t('title_ready')}</div>
                 <div class="ai-banner">${t('banner_top')}</div>
                 <div class="ai-status">${t('status_init')}</div>
@@ -518,7 +709,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                     <button id="ai-settings-btn" class="ai-btn ai-btn-secondary">${t('btn_settings')}</button>
                     <button id="ai-close-btn" class="ai-btn ai-btn-secondary">${t('btn_close')}</button>
                 </div>
-            </div>
+            </div >
         `;
             document.body.appendChild(this.overlay);
             this.bindElements();
@@ -562,7 +753,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                 this.statusEl.innerHTML = t('status_scrolling');
                 this.countEl.style.display = 'block';
                 const { turns, paragraphs } = ExporterCore.getCounts();
-                this.countEl.innerText = `${t('ui_turns')}: ${turns}\n${t('ui_paragraphs')}: ${paragraphs}`;
+                this.countEl.innerText = `${ t('ui_turns') }: ${ turns } \n${ t('ui_paragraphs') }: ${ paragraphs } `;
             } else if (state === 'PACKAGING') {
                 this.titleEl.innerText = t('title_scrolling');
                 this.statusEl.innerHTML = msg + '<br>' + t('status_esc_hint');
@@ -571,13 +762,13 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                 this.titleEl.innerText = t('title_finished');
                 this.statusEl.innerHTML = t('status_finished');
                 const { turns, paragraphs } = ExporterCore.getCounts();
-                this.countEl.innerText = `${t('ui_turns')}: ${turns}\n${t('ui_paragraphs')}: ${paragraphs}`;
+                this.countEl.innerText = `${ t('ui_turns') }: ${ turns } \n${ t('ui_paragraphs') }: ${ paragraphs } `;
                 btnContainer.style.display = 'flex';
                 this.saveBtn.style.display = 'inline-block';
                 this.closeBtn.style.display = 'inline-block';
             } else if (state === 'ERROR') {
                 this.titleEl.innerText = t('title_error');
-                this.statusEl.innerHTML = `<span class="ai-red">${msg}</span>`;
+                this.statusEl.innerHTML = `< span class="ai-red" > ${ msg }</span > `;
                 btnContainer.style.display = 'flex';
                 this.closeBtn.style.display = 'inline-block';
             }
@@ -752,7 +943,64 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                 this.update('READY');
             };
             btnContainer.appendChild(backBtn);
-            btnContainer.appendChild(backBtn);
+        },
+
+        showZipFallbackPrompt() {
+            return new Promise((resolve) => {
+                this.init();
+                this.titleEl.innerText = t('title_zip_missing');
+                this.statusEl.innerHTML = t('status_zip_missing');
+                this.countEl.style.display = 'none';
+
+                const btnContainer = this.overlay.querySelector('.ai-btn-container');
+                btnContainer.style.display = 'flex';
+                btnContainer.querySelectorAll('.ai-btn').forEach(b => b.style.display = 'none');
+
+                const createBtn = (text, cls, val) => {
+                    const b = document.createElement('button');
+                    b.className = 'ai-btn ' + cls;
+                    b.innerText = text;
+                    b.onclick = () => {
+                        btnContainer.querySelectorAll('.ai-fallback-btn').forEach(el => el.remove());
+                        resolve(val);
+                    };
+                    b.classList.add('ai-fallback-btn');
+                    btnContainer.appendChild(b);
+                };
+
+                createBtn(t('btn_retry'), '', 'retry');
+                createBtn(t('btn_mode_text'), 'ai-btn-secondary', 'text');
+                createBtn(t('btn_cancel'), 'ai-btn-secondary', 'cancel');
+            });
+        },
+
+        showCancelPrompt() {
+            return new Promise((resolve) => {
+                this.init();
+                this.titleEl.innerText = t('title_cancel');
+                this.statusEl.innerHTML = t('status_cancel');
+                this.countEl.style.display = 'none';
+
+                const btnContainer = this.overlay.querySelector('.ai-btn-container');
+                btnContainer.style.display = 'flex';
+                btnContainer.querySelectorAll('.ai-btn').forEach(b => b.style.display = 'none');
+
+                const createBtn = (text, cls, val) => {
+                    const b = document.createElement('button');
+                    b.className = 'ai-btn ' + cls;
+                    b.innerText = text;
+                    b.onclick = () => {
+                        btnContainer.querySelectorAll('.ai-cancel-btn').forEach(el => el.remove());
+                        resolve(val);
+                    };
+                    b.classList.add('ai-cancel-btn');
+                    btnContainer.appendChild(b);
+                };
+
+                createBtn(t('btn_mode_full'), '', 'retry');
+                createBtn(t('btn_mode_text'), 'ai-btn-secondary', 'text');
+                createBtn(t('btn_close'), 'ai-btn-secondary', 'close');
+            });
         },
 
         showToast(message, duration = 3000) {
@@ -787,24 +1035,8 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             }
             const btn = document.createElement('button');
             btn.id = 'ai-exporter-btn';
+            btn.className = 'ai-entry';
             btn.innerHTML = t('btn_export');
-            btn.style.position = 'fixed';
-            btn.style.bottom = '20px';
-            btn.style.right = '20px';
-            btn.style.zIndex = '9999';
-            btn.style.padding = '10px 20px';
-            btn.style.borderRadius = '25px';
-            btn.style.border = 'none';
-            btn.style.backgroundColor = '#0b57d0';
-            btn.style.color = 'white';
-            btn.style.cursor = 'pointer';
-            btn.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
-            btn.style.fontSize = '14px';
-            btn.style.fontWeight = '500';
-            btn.style.transition = 'transform 0.2s, background-color 0.2s';
-
-            btn.onmouseover = () => { btn.style.backgroundColor = '#0842a0'; btn.style.transform = 'scale(1.05)'; };
-            btn.onmouseout = () => { btn.style.backgroundColor = '#0b57d0'; btn.style.transform = 'scale(1)'; };
             btn.onclick = () => ExporterCore.start();
 
             const badge = document.createElement('div');
@@ -906,7 +1138,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
 
         async save() {
             if (this.cachedBlob) {
-                this.downloadBlob(this.cachedBlob, `Gemini_Chat_v14_${Date.now()}.${this.exportMode === 'full' ? 'zip' : 'md'}`);
+                this.downloadBlob(this.cachedBlob, `Gemini_Chat_v14_${ Date.now() }.${ this.exportMode === 'full' ? 'zip' : 'md' } `);
                 return;
             }
             try {
@@ -1343,7 +1575,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         if (tag === 'img') {
             const alt = node.getAttribute('alt') || '';
             const src = node.getAttribute('src') || '';
-            return `![${alt}](${src})`;
+            return `![${ alt }](${ src })`;
         }
 
         // Code blocks / 代码块
@@ -1353,389 +1585,389 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                 const language = Array.from(codeEl.classList).find(c => c.startsWith('language-'))?.replace('language-', '') || '';
                 const code = codeEl.textContent;
                 return `\n\`\`\`${language}\n${code}\n\`\`\`\n`;
-            }
+}
         }
 
-        // Inline code / 行内代码
-        if (tag === 'code') {
-            const text = node.textContent;
-            // Handle backticks inside inline code for correct Markdown rendering. / 处理行内代码中的反引号以确保正确的 Markdown 渲染。
-            if (text.includes('`')) {
-                return `\`\` ${text} \`\``;
-            }
-            return `\`${text}\``;
+// Inline code / 行内代码
+if (tag === 'code') {
+    const text = node.textContent;
+    // Handle backticks inside inline code for correct Markdown rendering. / 处理行内代码中的反引号以确保正确的 Markdown 渲染。
+    if (text.includes('`')) {
+        return `\`\` ${text} \`\``;
+    }
+    return `\`${text}\``;
+}
+
+// Headings / 标题
+if (/^h[1-6]$/.test(tag)) {
+    const level = parseInt(tag[1]);
+    return '\n' + '#'.repeat(level) + ' ' + getChildrenText(node, listContext, indent) + '\n';
+}
+
+// Bold / 加粗
+if (tag === 'strong' || tag === 'b') {
+    return `**${getChildrenText(node, listContext, indent)}**`;
+}
+
+// Italic / 斜体
+if (tag === 'em' || tag === 'i') {
+    return `*${getChildrenText(node, listContext, indent)}*`;
+}
+
+// Links / 链接
+if (tag === 'a') {
+    const href = node.getAttribute('href') || '';
+    const text = getChildrenText(node, listContext, indent);
+    return `[${text}](${href})`;
+}
+
+// Lists - pass context to children / 列表 - 将上下文传递给子元素
+if (tag === 'ul' || tag === 'ol') {
+    const listType = tag; // 'ul' or 'ol'
+    let index = 0;
+    let result = '\n';
+
+    for (const child of node.childNodes) {
+        if (child.nodeType === Node.ELEMENT_NODE && child.tagName.toLowerCase() === 'li') {
+            index++;
+            // Pass indent + 1 to children / 将缩进 + 1 传递给子元素
+            result += htmlToMarkdown(child, { type: listType, index: index }, indent + 1);
+        } else {
+            // Pass indent + 1 to children even if not li (e.g. nested ul) / 即使不是 li 也传递缩进 + 1（例如嵌套的 ul）
+            result += htmlToMarkdown(child, listContext, indent + 1);
         }
+    }
 
-        // Headings / 标题
-        if (/^h[1-6]$/.test(tag)) {
-            const level = parseInt(tag[1]);
-            return '\n' + '#'.repeat(level) + ' ' + getChildrenText(node, listContext, indent) + '\n';
-        }
+    return result + '\n';
+}
 
-        // Bold / 加粗
-        if (tag === 'strong' || tag === 'b') {
-            return `**${getChildrenText(node, listContext, indent)}**`;
-        }
+// List items - use context to determine format / 列表项 - 使用上下文确定格式
+if (tag === 'li') {
+    // Children of li are at the same indent level as the li itself (which is already indented by parent) / li 的子元素与 li 本身处于相同的缩进级别（父元素已缩进）
+    const content = getChildrenText(node, listContext, indent);
+    // Render bullet at indent - 1 / 在缩进 - 1 处渲染符号
+    const indentStr = '  '.repeat(Math.max(0, indent - 1));
+    if (listContext && listContext.type === 'ol') {
+        return `${indentStr}${listContext.index}. ${content}\n`;
+    } else {
+        return `${indentStr}- ${content}\n`;
+    }
+}
 
-        // Italic / 斜体
-        if (tag === 'em' || tag === 'i') {
-            return `*${getChildrenText(node, listContext, indent)}*`;
-        }
+// Line breaks / 换行符
+if (tag === 'br') {
+    return '  \n';
+}
 
-        // Links / 链接
-        if (tag === 'a') {
-            const href = node.getAttribute('href') || '';
-            const text = getChildrenText(node, listContext, indent);
-            return `[${text}](${href})`;
-        }
+// Blockquotes - prefix each line with > / 引用块 - 每行前缀 >
+if (tag === 'blockquote') {
+    const content = getChildrenText(node, listContext, indent);
+    // Split by lines and prefix each with "> " / 按行拆分并为每行添加 "> " 前缀
+    return '\n' + content.split('\n')
+        .map(line => `> ${line}`)
+        .join('\n') + '\n';
+}
 
-        // Lists - pass context to children / 列表 - 将上下文传递给子元素
-        if (tag === 'ul' || tag === 'ol') {
-            const listType = tag; // 'ul' or 'ol'
-            let index = 0;
-            let result = '\n';
+// Block elements / 块级元素
+if (['div', 'p'].includes(tag)) {
+    return '\n' + getChildrenText(node, listContext, indent) + '\n';
+}
 
-            for (const child of node.childNodes) {
-                if (child.nodeType === Node.ELEMENT_NODE && child.tagName.toLowerCase() === 'li') {
-                    index++;
-                    // Pass indent + 1 to children / 将缩进 + 1 传递给子元素
-                    result += htmlToMarkdown(child, { type: listType, index: index }, indent + 1);
-                } else {
-                    // Pass indent + 1 to children even if not li (e.g. nested ul) / 即使不是 li 也传递缩进 + 1（例如嵌套的 ul）
-                    result += htmlToMarkdown(child, listContext, indent + 1);
+return getChildrenText(node, listContext, indent);
+    }
+
+function getChildrenText(node, listContext = null, indent = 0) {
+    return Array.from(node.childNodes).map(child => htmlToMarkdown(child, listContext, indent)).join('');
+}
+
+function normalizeConversation() {
+    if (ExporterCore.turnOrder.length === 0 || ExporterCore.collectedData.size === 0) return;
+    const newOrder = [];
+    const newMap = new Map();
+
+    for (let i = 0; i < ExporterCore.turnOrder.length; i++) {
+        const id = ExporterCore.turnOrder[i];
+        const item = ExporterCore.collectedData.get(id);
+        if (!item) continue;
+
+        if (item.role === Constants.ROLE_GEMINI && item.thoughts && !item.text) {
+            let merged = false;
+            for (let j = i + 1; j < ExporterCore.turnOrder.length; j++) {
+                const nextId = ExporterCore.turnOrder[j];
+                const nextItem = ExporterCore.collectedData.get(nextId);
+                if (!nextItem) continue;
+                if (nextItem.role === Constants.ROLE_USER) break;
+                if (nextItem.role === Constants.ROLE_GEMINI && nextItem.text) {
+                    nextItem.thoughts = nextItem.thoughts
+                        ? (item.thoughts + '\n\n' + nextItem.thoughts)
+                        : item.thoughts;
+                    ExporterCore.collectedData.set(nextId, nextItem);
+                    merged = true;
+                    break;
                 }
             }
-
-            return result + '\n';
+            if (merged) continue;
         }
+        newOrder.push(id);
+        newMap.set(id, item);
+    }
+    ExporterCore.turnOrder = newOrder;
+    ExporterCore.collectedData = newMap;
+}
 
-        // List items - use context to determine format / 列表项 - 使用上下文确定格式
-        if (tag === 'li') {
-            // Children of li are at the same indent level as the li itself (which is already indented by parent) / li 的子元素与 li 本身处于相同的缩进级别（父元素已缩进）
-            const content = getChildrenText(node, listContext, indent);
-            // Render bullet at indent - 1 / 在缩进 - 1 处渲染符号
-            const indentStr = '  '.repeat(Math.max(0, indent - 1));
-            if (listContext && listContext.type === 'ol') {
-                return `${indentStr}${listContext.index}. ${content}\n`;
+function countParagraphs() {
+    return ExporterCore.getCounts().paragraphs;
+}
+
+async function downloadTextOnly() {
+    let content = `# ${t('file_header')}` + "\n\n";
+    content += `**${t('file_time')}:** ${new Date().toLocaleString()}` + "\n\n";
+    content += `**${t('file_turns')}:** ${ExporterCore.turnOrder.length}` + "\n\n";
+    content += `**${t('file_paragraphs')}:** ${countParagraphs()}` + "\n\n";
+    content += "---\n\n";
+
+    for (const id of ExporterCore.turnOrder) {
+        const item = ExporterCore.collectedData.get(id);
+        if (!item) continue;
+        if (item.role === Constants.ROLE_GEMINI && item.thoughts && AppSettings.includeThinking) {
+            const processedThoughts = convertResourcesToLinks(item.thoughts || '');
+            if (AppSettings.collapsibleThinking) {
+                content += `<details>\n<summary>${t('role_thoughts')}</summary>\n\n${processedThoughts}\n\n</details>\n\n`;
             } else {
-                return `${indentStr}- ${content}\n`;
+                content += `> **${t('role_thoughts')}**\n>\n` + processedThoughts.split('\n').map(l => `> ${l}`).join('\n') + `\n\n`;
             }
         }
-
-        // Line breaks / 换行符
-        if (tag === 'br') {
-            return '  \n';
+        const roleName = item.role;
+        const textOut = (item.text || '').trim();
+        const attachmentsMd = generateAttachmentsMarkdown(item);
+        if (textOut.length > 0) {
+            const processedText = convertResourcesToLinks(textOut);
+            content += `## ${roleName}\n\n${processedText}\n\n`;
+            if (attachmentsMd) content += attachmentsMd;
+            content += `---\n\n`;
+        } else if (attachmentsMd) {
+            content += attachmentsMd + `---\n\n`;
         }
-
-        // Blockquotes - prefix each line with > / 引用块 - 每行前缀 >
-        if (tag === 'blockquote') {
-            const content = getChildrenText(node, listContext, indent);
-            // Split by lines and prefix each with "> " / 按行拆分并为每行添加 "> " 前缀
-            return '\n' + content.split('\n')
-                .map(line => `> ${line}`)
-                .join('\n') + '\n';
-        }
-
-        // Block elements / 块级元素
-        if (['div', 'p'].includes(tag)) {
-            return '\n' + getChildrenText(node, listContext, indent) + '\n';
-        }
-
-        return getChildrenText(node, listContext, indent);
     }
 
-    function getChildrenText(node, listContext = null, indent = 0) {
-        return Array.from(node.childNodes).map(child => htmlToMarkdown(child, listContext, indent)).join('');
-    }
+    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+    ExporterCore.cachedBlob = blob;
+    downloadBlob(blob, `Gemini_Chat_v14_${Date.now()}.md`);
+}
 
-    function normalizeConversation() {
-        if (ExporterCore.turnOrder.length === 0 || ExporterCore.collectedData.size === 0) return;
-        const newOrder = [];
-        const newMap = new Map();
-
-        for (let i = 0; i < ExporterCore.turnOrder.length; i++) {
-            const id = ExporterCore.turnOrder[i];
-            const item = ExporterCore.collectedData.get(id);
-            if (!item) continue;
-
-            if (item.role === Constants.ROLE_GEMINI && item.thoughts && !item.text) {
-                let merged = false;
-                for (let j = i + 1; j < ExporterCore.turnOrder.length; j++) {
-                    const nextId = ExporterCore.turnOrder[j];
-                    const nextItem = ExporterCore.collectedData.get(nextId);
-                    if (!nextItem) continue;
-                    if (nextItem.role === Constants.ROLE_USER) break;
-                    if (nextItem.role === Constants.ROLE_GEMINI && nextItem.text) {
-                        nextItem.thoughts = nextItem.thoughts
-                            ? (item.thoughts + '\n\n' + nextItem.thoughts)
-                            : item.thoughts;
-                        ExporterCore.collectedData.set(nextId, nextItem);
-                        merged = true;
-                        break;
-                    }
+async function processResources(uniqueUrls, zipFolder, config) {
+    const resourceMap = new Map();
+    if (uniqueUrls.size > 0) {
+        UIManager.update('PACKAGING', t(config.statusStart, { n: uniqueUrls.size }));
+        let completedCount = 0;
+        const promises = Array.from(uniqueUrls).map(async (url, index) => {
+            if (ExporterCore.cancelRequested) return;
+            try {
+                const blob = await fetchResource(url);
+                if (blob) {
+                    const filename = config.filenameGenerator(url, index, blob);
+                    zipFolder.file(filename, blob);
+                    resourceMap.set(url, `${config.subDir}/${filename}`);
                 }
-                if (merged) continue;
+            } catch (e) {
+                console.error(`${config.subDir} download failed:`, url, e);
             }
-            newOrder.push(id);
-            newMap.set(id, item);
-        }
-        ExporterCore.turnOrder = newOrder;
-        ExporterCore.collectedData = newMap;
-    }
-
-    function countParagraphs() {
-        return ExporterCore.getCounts().paragraphs;
-    }
-
-    async function downloadTextOnly() {
-        let content = `# ${t('file_header')}` + "\n\n";
-        content += `**${t('file_time')}:** ${new Date().toLocaleString()}` + "\n\n";
-        content += `**${t('file_turns')}:** ${ExporterCore.turnOrder.length}` + "\n\n";
-        content += `**${t('file_paragraphs')}:** ${countParagraphs()}` + "\n\n";
-        content += "---\n\n";
-
-        for (const id of ExporterCore.turnOrder) {
-            const item = ExporterCore.collectedData.get(id);
-            if (!item) continue;
-            if (item.role === Constants.ROLE_GEMINI && item.thoughts && AppSettings.includeThinking) {
-                const processedThoughts = convertResourcesToLinks(item.thoughts || '');
-                if (AppSettings.collapsibleThinking) {
-                    content += `<details>\n<summary>${t('role_thoughts')}</summary>\n\n${processedThoughts}\n\n</details>\n\n`;
-                } else {
-                    content += `> **${t('role_thoughts')}**\n>\n` + processedThoughts.split('\n').map(l => `> ${l}`).join('\n') + `\n\n`;
-                }
-            }
-            const roleName = item.role;
-            const textOut = (item.text || '').trim();
-            const attachmentsMd = generateAttachmentsMarkdown(item);
-            if (textOut.length > 0) {
-                const processedText = convertResourcesToLinks(textOut);
-                content += `## ${roleName}\n\n${processedText}\n\n`;
-                if (attachmentsMd) content += attachmentsMd;
-                content += `---\n\n`;
-            } else if (attachmentsMd) {
-                content += attachmentsMd + `---\n\n`;
-            }
-        }
-
-        const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
-        ExporterCore.cachedBlob = blob;
-        downloadBlob(blob, `Gemini_Chat_v14_${Date.now()}.md`);
-    }
-
-    async function processResources(uniqueUrls, zipFolder, config) {
-        const resourceMap = new Map();
-        if (uniqueUrls.size > 0) {
-            UIManager.update('PACKAGING', t(config.statusStart, { n: uniqueUrls.size }));
-            let completedCount = 0;
-            const promises = Array.from(uniqueUrls).map(async (url, index) => {
-                if (ExporterCore.cancelRequested) return;
-                try {
-                    const blob = await fetchResource(url);
-                    if (blob) {
-                        const filename = config.filenameGenerator(url, index, blob);
-                        zipFolder.file(filename, blob);
-                        resourceMap.set(url, `${config.subDir}/${filename}`);
-                    }
-                } catch (e) {
-                    console.error(`${config.subDir} download failed:`, url, e);
-                }
-                completedCount++;
-                if (completedCount % 5 === 0 || completedCount === uniqueUrls.size) {
-                    UIManager.update('PACKAGING', t(config.statusProgress, { c: completedCount, t: uniqueUrls.size }));
-                }
-            });
-            let cancelIntervalId = null;
-            const cancelWatcher = new Promise(resolve => {
-                cancelIntervalId = setInterval(() => {
-                    if (ExporterCore.cancelRequested) { clearInterval(cancelIntervalId); resolve(); }
-                }, 200);
-            });
-            try { await Promise.race([Promise.all(promises), cancelWatcher]); } finally { if (cancelIntervalId) clearInterval(cancelIntervalId); }
-        }
-        return resourceMap;
-    }
-
-    function collectImageUrls() {
-        const uniqueUrls = new Set();
-        for (const item of ExporterCore.collectedData.values()) {
-            const text = item.text || '';
-            const thoughts = item.thoughts || '';
-            for (const match of text.matchAll(Constants.IMG_REGEX)) uniqueUrls.add(match[2]);
-            for (const match of thoughts.matchAll(Constants.IMG_REGEX)) uniqueUrls.add(match[2]);
-        }
-        return uniqueUrls;
-    }
-
-    async function processImages(imgFolder) {
-        const uniqueUrls = collectImageUrls();
-        return processResources(uniqueUrls, imgFolder, {
-            subDir: 'images',
-            statusStart: 'status_packaging_images',
-            statusProgress: 'status_packaging_images_progress',
-            filenameGenerator: (url, index, blob) => {
-                const extension = (blob.type.split('/')[1] || 'png').split('+')[0];
-                return `image_${index}.${extension}`;
+            completedCount++;
+            if (completedCount % 5 === 0 || completedCount === uniqueUrls.size) {
+                UIManager.update('PACKAGING', t(config.statusProgress, { c: completedCount, t: uniqueUrls.size }));
             }
         });
-    }
-
-    function collectFileUrls() {
-        const downloadableExtensions = ['.pdf', '.csv', '.txt', '.json', '.py', '.js', '.html', '.css', '.md', '.zip', '.tar', '.gz'];
-        const uniqueUrls = new Set();
-        const fileFilter = (match) => {
-            const url = match[2];
-            const lowerUrl = url.toLowerCase();
-            const isBlob = lowerUrl.startsWith('blob:');
-            const isGoogleStorage = lowerUrl.includes('googlestorage') || lowerUrl.includes('googleusercontent');
-            const hasExt = downloadableExtensions.some(ext => lowerUrl.split('?')[0].endsWith(ext));
-            return isBlob || isGoogleStorage || hasExt;
-        };
-        for (const item of ExporterCore.collectedData.values()) {
-            const text = item.text || '';
-            const thoughts = item.thoughts || '';
-            for (const match of text.matchAll(Constants.LINK_REGEX)) {
-                if (match.index > 0 && text[match.index - 1] === '!') continue;
-                if (fileFilter(match)) uniqueUrls.add(match[2]);
-            }
-            for (const match of thoughts.matchAll(Constants.LINK_REGEX)) {
-                if (match.index > 0 && thoughts[match.index - 1] === '!') continue;
-                if (fileFilter(match)) uniqueUrls.add(match[2]);
-            }
-        }
-        return uniqueUrls;
-    }
-
-    async function processFiles(fileFolder) {
-        const uniqueUrls = collectFileUrls();
-        return processResources(uniqueUrls, fileFolder, {
-            subDir: 'files',
-            statusStart: 'status_packaging_files',
-            statusProgress: 'status_packaging_files_progress',
-            filenameGenerator: (url, index, blob) => {
-                let filename = "file";
-                try {
-                    const urlObj = new URL(url);
-                    filename = urlObj.pathname.substring(urlObj.pathname.lastIndexOf('/') + 1);
-                } catch (e) { filename = url.split('/').pop().split('?')[0]; }
-                let decodedFilename = filename;
-                try { decodedFilename = decodeURIComponent(filename); } catch (e) { }
-                if (!decodedFilename || decodedFilename.length > 100) {
-                    const extMatch = filename.match(/\.[^./?]+$/);
-                    const ext = extMatch ? extMatch[0] : '';
-                    decodedFilename = `file_${index}${ext}`;
-                }
-                return `${index}_${decodedFilename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-            }
+        let cancelIntervalId = null;
+        const cancelWatcher = new Promise(resolve => {
+            cancelIntervalId = setInterval(() => {
+                if (ExporterCore.cancelRequested) { clearInterval(cancelIntervalId); resolve(); }
+            }, 200);
         });
+        try { await Promise.race([Promise.all(promises), cancelWatcher]); } finally { if (cancelIntervalId) clearInterval(cancelIntervalId); }
     }
+    return resourceMap;
+}
 
-    function generateMarkdownContent(imgMap, fileMap) {
-        let content = `# ${t('file_header')}` + "\n\n";
-        content += `**${t('file_time')}:** ${new Date().toLocaleString()}` + "\n\n";
-        content += `**${t('file_turns')}:** ${ExporterCore.turnOrder.length}` + "\n\n";
-        content += `**${t('file_paragraphs')}:** ${countParagraphs()}` + "\n\n";
-        content += "---\n\n";
+function collectImageUrls() {
+    const uniqueUrls = new Set();
+    for (const item of ExporterCore.collectedData.values()) {
+        const text = item.text || '';
+        const thoughts = item.thoughts || '';
+        for (const match of text.matchAll(Constants.IMG_REGEX)) uniqueUrls.add(match[2]);
+        for (const match of thoughts.matchAll(Constants.IMG_REGEX)) uniqueUrls.add(match[2]);
+    }
+    return uniqueUrls;
+}
 
-        for (const id of ExporterCore.turnOrder) {
-            const item = ExporterCore.collectedData.get(id);
-            if (!item) continue;
-            if (item.role === Constants.ROLE_GEMINI && item.thoughts && AppSettings.includeThinking) {
-                let processedThoughts = item.thoughts;
-                processedThoughts = processedThoughts.replace(Constants.IMG_REGEX, (match, alt, url, title) => {
-                    if (imgMap.has(url)) return `![${alt}](${imgMap.get(url)}${title || ''})`;
-                    return match;
-                });
-                processedThoughts = processedThoughts.replace(Constants.LINK_REGEX, (match, text, url, title) => {
-                    if (fileMap.has(url)) return `[${text}](${fileMap.get(url)}${title || ''})`;
-                    return match;
-                });
-                if (AppSettings.collapsibleThinking) {
-                    content += `<details>\n<summary>${t('role_thoughts')}</summary>\n\n${processedThoughts}\n\n</details>\n\n`;
-                } else {
-                    content += `> **${t('role_thoughts')}**\n>\n` + processedThoughts.split('\n').map(l => `> ${l}`).join('\n') + `\n\n`;
-                }
+async function processImages(imgFolder) {
+    const uniqueUrls = collectImageUrls();
+    return processResources(uniqueUrls, imgFolder, {
+        subDir: 'images',
+        statusStart: 'status_packaging_images',
+        statusProgress: 'status_packaging_images_progress',
+        filenameGenerator: (url, index, blob) => {
+            const extension = (blob.type.split('/')[1] || 'png').split('+')[0];
+            return `image_${index}.${extension}`;
+        }
+    });
+}
+
+function collectFileUrls() {
+    const downloadableExtensions = ['.pdf', '.csv', '.txt', '.json', '.py', '.js', '.html', '.css', '.md', '.zip', '.tar', '.gz'];
+    const uniqueUrls = new Set();
+    const fileFilter = (match) => {
+        const url = match[2];
+        const lowerUrl = url.toLowerCase();
+        const isBlob = lowerUrl.startsWith('blob:');
+        const isGoogleStorage = lowerUrl.includes('googlestorage') || lowerUrl.includes('googleusercontent');
+        const hasExt = downloadableExtensions.some(ext => lowerUrl.split('?')[0].endsWith(ext));
+        return isBlob || isGoogleStorage || hasExt;
+    };
+    for (const item of ExporterCore.collectedData.values()) {
+        const text = item.text || '';
+        const thoughts = item.thoughts || '';
+        for (const match of text.matchAll(Constants.LINK_REGEX)) {
+            if (match.index > 0 && text[match.index - 1] === '!') continue;
+            if (fileFilter(match)) uniqueUrls.add(match[2]);
+        }
+        for (const match of thoughts.matchAll(Constants.LINK_REGEX)) {
+            if (match.index > 0 && thoughts[match.index - 1] === '!') continue;
+            if (fileFilter(match)) uniqueUrls.add(match[2]);
+        }
+    }
+    return uniqueUrls;
+}
+
+async function processFiles(fileFolder) {
+    const uniqueUrls = collectFileUrls();
+    return processResources(uniqueUrls, fileFolder, {
+        subDir: 'files',
+        statusStart: 'status_packaging_files',
+        statusProgress: 'status_packaging_files_progress',
+        filenameGenerator: (url, index, blob) => {
+            let filename = "file";
+            try {
+                const urlObj = new URL(url);
+                filename = urlObj.pathname.substring(urlObj.pathname.lastIndexOf('/') + 1);
+            } catch (e) { filename = url.split('/').pop().split('?')[0]; }
+            let decodedFilename = filename;
+            try { decodedFilename = decodeURIComponent(filename); } catch (e) { }
+            if (!decodedFilename || decodedFilename.length > 100) {
+                const extMatch = filename.match(/\.[^./?]+$/);
+                const ext = extMatch ? extMatch[0] : '';
+                decodedFilename = `file_${index}${ext}`;
             }
-            const roleName = item.role;
-            let processedText = (item.text || '').trim();
-            const attachmentsMd = generateAttachmentsMarkdown(item);
-            processedText = processedText.replace(Constants.IMG_REGEX, (match, alt, url, title) => {
+            return `${index}_${decodedFilename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+        }
+    });
+}
+
+function generateMarkdownContent(imgMap, fileMap) {
+    let content = `# ${t('file_header')}` + "\n\n";
+    content += `**${t('file_time')}:** ${new Date().toLocaleString()}` + "\n\n";
+    content += `**${t('file_turns')}:** ${ExporterCore.turnOrder.length}` + "\n\n";
+    content += `**${t('file_paragraphs')}:** ${countParagraphs()}` + "\n\n";
+    content += "---\n\n";
+
+    for (const id of ExporterCore.turnOrder) {
+        const item = ExporterCore.collectedData.get(id);
+        if (!item) continue;
+        if (item.role === Constants.ROLE_GEMINI && item.thoughts && AppSettings.includeThinking) {
+            let processedThoughts = item.thoughts;
+            processedThoughts = processedThoughts.replace(Constants.IMG_REGEX, (match, alt, url, title) => {
                 if (imgMap.has(url)) return `![${alt}](${imgMap.get(url)}${title || ''})`;
                 return match;
             });
-            processedText = processedText.replace(Constants.LINK_REGEX, (match, text, url, title) => {
+            processedThoughts = processedThoughts.replace(Constants.LINK_REGEX, (match, text, url, title) => {
                 if (fileMap.has(url)) return `[${text}](${fileMap.get(url)}${title || ''})`;
                 return match;
             });
-            if (processedText.length > 0) {
-                content += `## ${roleName}\n\n${processedText}\n\n`;
-                if (attachmentsMd) content += attachmentsMd;
-                content += `---\n\n`;
-            } else if (attachmentsMd) {
-                content += attachmentsMd + `---\n\n`;
+            if (AppSettings.collapsibleThinking) {
+                content += `<details>\n<summary>${t('role_thoughts')}</summary>\n\n${processedThoughts}\n\n</details>\n\n`;
+            } else {
+                content += `> **${t('role_thoughts')}**\n>\n` + processedThoughts.split('\n').map(l => `> ${l}`).join('\n') + `\n\n`;
             }
         }
-        return content;
-    }
-
-    function toFileName(url) {
-        let base = 'file';
-        try {
-            const u = new URL(url);
-            base = u.pathname.substring(u.pathname.lastIndexOf('/') + 1) || 'file';
-            if (!base || base === 'file') {
-                const qp = new URLSearchParams(u.search);
-                const cand = qp.get('filename') || qp.get('file') || qp.get('name');
-                if (cand) base = cand;
-            }
-        } catch (_) {
-            base = url.split('/').pop().split('?')[0] || 'file';
-            if (!base || base === 'file') {
-                const m = String(url).match(/[?&](?:filename|file|name)=([^&]+)/i);
-                if (m) base = m[1];
-            }
-        }
-        base = String(base).replace(/^['"]+|['"]+$/g, '');
-        try { return decodeURIComponent(base); } catch (_) { return base; }
-    }
-
-    function escapeMdLabel(s) {
-        return String(s || '').replace(/]/g, '\\]').replace(/\n/g, ' ');
-    }
-
-    function generateAttachmentsMarkdown(item) {
-        const links = Array.isArray(item.attachments) ? item.attachments : [];
-        if (links.length === 0 && !(ATTACHMENT_COMBINED_FALLBACK && item.attachmentScanAttempted)) return '';
-        let listContent;
-        if (links.length > 0) {
-            listContent = links.map(u => {
-                const label = escapeMdLabel(toFileName(u));
-                return `- [${label}](<${u}>)`;
-            }).join('\n');
-        } else {
-            listContent = `- ${t('attachments_link_unavailable')}`;
-        }
-        return `### ${t('attachments_section')}\n\n${listContent}\n\n`;
-    }
-
-    function convertResourcesToLinks(text) {
-        const replacedImages = text.replace(Constants.IMG_REGEX, (match, alt, url) => {
-            const name = (alt && alt.trim().length > 0) ? alt.trim() : toFileName(url);
-            return `[${name}](${url})`;
+        const roleName = item.role;
+        let processedText = (item.text || '').trim();
+        const attachmentsMd = generateAttachmentsMarkdown(item);
+        processedText = processedText.replace(Constants.IMG_REGEX, (match, alt, url, title) => {
+            if (imgMap.has(url)) return `![${alt}](${imgMap.get(url)}${title || ''})`;
+            return match;
         });
-        return replacedImages.replace(Constants.LINK_REGEX, (match, textLabel, url) => {
-            const name = (textLabel && textLabel.trim().length > 0) ? textLabel.trim() : toFileName(url);
-            return `[${name}](${url})`;
+        processedText = processedText.replace(Constants.LINK_REGEX, (match, text, url, title) => {
+            if (fileMap.has(url)) return `[${text}](${fileMap.get(url)}${title || ''})`;
+            return match;
         });
+        if (processedText.length > 0) {
+            content += `## ${roleName}\n\n${processedText}\n\n`;
+            if (attachmentsMd) content += attachmentsMd;
+            content += `---\n\n`;
+        } else if (attachmentsMd) {
+            content += attachmentsMd + `---\n\n`;
+        }
     }
+    return content;
+}
 
-    function generateHTMLContent(imgMap, fileMap) {
-        const title = t('file_header');
-        const time = new Date().toLocaleString();
-        const turns = ExporterCore.turnOrder.length;
-        const paragraphs = countParagraphs();
+function toFileName(url) {
+    let base = 'file';
+    try {
+        const u = new URL(url);
+        base = u.pathname.substring(u.pathname.lastIndexOf('/') + 1) || 'file';
+        if (!base || base === 'file') {
+            const qp = new URLSearchParams(u.search);
+            const cand = qp.get('filename') || qp.get('file') || qp.get('name');
+            if (cand) base = cand;
+        }
+    } catch (_) {
+        base = url.split('/').pop().split('?')[0] || 'file';
+        if (!base || base === 'file') {
+            const m = String(url).match(/[?&](?:filename|file|name)=([^&]+)/i);
+            if (m) base = m[1];
+        }
+    }
+    base = String(base).replace(/^['"]+|['"]+$/g, '');
+    try { return decodeURIComponent(base); } catch (_) { return base; }
+}
 
-        let html = `<!DOCTYPE html>
+function escapeMdLabel(s) {
+    return String(s || '').replace(/]/g, '\\]').replace(/\n/g, ' ');
+}
+
+function generateAttachmentsMarkdown(item) {
+    const links = Array.isArray(item.attachments) ? item.attachments : [];
+    if (links.length === 0 && !(ATTACHMENT_COMBINED_FALLBACK && item.attachmentScanAttempted)) return '';
+    let listContent;
+    if (links.length > 0) {
+        listContent = links.map(u => {
+            const label = escapeMdLabel(toFileName(u));
+            return `- [${label}](<${u}>)`;
+        }).join('\n');
+    } else {
+        listContent = `- ${t('attachments_link_unavailable')}`;
+    }
+    return `### ${t('attachments_section')}\n\n${listContent}\n\n`;
+}
+
+function convertResourcesToLinks(text) {
+    const replacedImages = text.replace(Constants.IMG_REGEX, (match, alt, url) => {
+        const name = (alt && alt.trim().length > 0) ? alt.trim() : toFileName(url);
+        return `[${name}](${url})`;
+    });
+    return replacedImages.replace(Constants.LINK_REGEX, (match, textLabel, url) => {
+        const name = (textLabel && textLabel.trim().length > 0) ? textLabel.trim() : toFileName(url);
+        return `[${name}](${url})`;
+    });
+}
+
+function generateHTMLContent(imgMap, fileMap) {
+    const title = t('file_header');
+    const time = new Date().toLocaleString();
+    const turns = ExporterCore.turnOrder.length;
+    const paragraphs = countParagraphs();
+
+    let html = `<!DOCTYPE html>
 <html lang="${lang}">
 <head>
     <meta charset="UTF-8">
@@ -1773,312 +2005,312 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         </div>
 `;
 
-        for (const id of ExporterCore.turnOrder) {
-            const item = ExporterCore.collectedData.get(id);
-            if (!item) continue;
+    for (const id of ExporterCore.turnOrder) {
+        const item = ExporterCore.collectedData.get(id);
+        if (!item) continue;
 
-            const roleClass = item.role === Constants.ROLE_USER ? 'user' : 'model';
-            const roleName = item.role === Constants.ROLE_USER ? t('role_user') : t('role_gemini');
+        const roleClass = item.role === Constants.ROLE_USER ? 'user' : 'model';
+        const roleName = item.role === Constants.ROLE_USER ? t('role_user') : t('role_gemini');
 
-            html += `<div class="turn">
+        html += `<div class="turn">
                     <div class="role ${roleClass}">${roleName}</div>
                     <div class="content">`;
 
-            // Thinking / 思考过程
-            if (item.role === Constants.ROLE_GEMINI && item.thoughts && AppSettings.includeThinking) {
-                let thoughtsHtml = processTextForHTML(item.thoughts, imgMap, fileMap);
-                if (AppSettings.collapsibleThinking) {
-                    html += `<div class="thinking">
+        // Thinking / 思考过程
+        if (item.role === Constants.ROLE_GEMINI && item.thoughts && AppSettings.includeThinking) {
+            let thoughtsHtml = processTextForHTML(item.thoughts, imgMap, fileMap);
+            if (AppSettings.collapsibleThinking) {
+                html += `<div class="thinking">
                             <details>
                                 <summary>${t('role_thoughts')}</summary>
                                 <div class="thinking-content">${thoughtsHtml}</div>
                             </details>
                         </div>`;
-                } else {
-                    html += `<div class="thinking">
+            } else {
+                html += `<div class="thinking">
                             <blockquote><strong>${t('role_thoughts')}</strong><br>${thoughtsHtml}</blockquote>
                         </div>`;
-                }
             }
-
-            // Text / 文本内容
-            let textHtml = processTextForHTML(item.text || '', imgMap, fileMap);
-            html += `<div>${textHtml}</div>`;
-
-            // Attachments / 附件
-            const attachmentsHtml = generateAttachmentsHTML(item);
-            if (attachmentsHtml) {
-                html += `<div class="attachments">${attachmentsHtml}</div>`;
-            }
-
-            html += `</div></div>`; // Close content and turn
         }
 
-        html += `</div></body></html>`;
-        return html;
+        // Text / 文本内容
+        let textHtml = processTextForHTML(item.text || '', imgMap, fileMap);
+        html += `<div>${textHtml}</div>`;
+
+        // Attachments / 附件
+        const attachmentsHtml = generateAttachmentsHTML(item);
+        if (attachmentsHtml) {
+            html += `<div class="attachments">${attachmentsHtml}</div>`;
+        }
+
+        html += `</div></div>`; // Close content and turn
     }
 
-    function processTextForHTML(text, imgMap, fileMap) {
-        if (!text) return '';
-        let processed = text;
+    html += `</div></body></html>`;
+    return html;
+}
 
-        // Replace Images / 替换图片
-        processed = processed.replace(Constants.IMG_REGEX, (match, alt, url, title) => {
-            const src = imgMap.has(url) ? imgMap.get(url) : url;
-            return `<img src="${src}" alt="${alt}" title="${title || ''}">`;
-        });
+function processTextForHTML(text, imgMap, fileMap) {
+    if (!text) return '';
+    let processed = text;
 
-        // Replace Links / 替换链接
-        processed = processed.replace(Constants.LINK_REGEX, (match, text, url, title) => {
-            const href = fileMap.has(url) ? fileMap.get(url) : url;
-            return `<a href="${href}" title="${title || ''}" target="_blank">${text}</a>`;
-        });
+    // Replace Images / 替换图片
+    processed = processed.replace(Constants.IMG_REGEX, (match, alt, url, title) => {
+        const src = imgMap.has(url) ? imgMap.get(url) : url;
+        return `<img src="${src}" alt="${alt}" title="${title || ''}">`;
+    });
 
-        return processed;
-    }
+    // Replace Links / 替换链接
+    processed = processed.replace(Constants.LINK_REGEX, (match, text, url, title) => {
+        const href = fileMap.has(url) ? fileMap.get(url) : url;
+        return `<a href="${href}" title="${title || ''}" target="_blank">${text}</a>`;
+    });
 
-    function generateAttachmentsHTML(item) {
-        const links = Array.isArray(item.attachments) ? item.attachments : [];
-        if (links.length === 0) return '';
-        return links.map(u => {
-            const label = toFileName(u);
-            return `<a href="${u}" class="attachment-item" target="_blank">📎 ${label}</a>`;
-        }).join('');
-    }
+    return processed;
+}
 
-    function getJSZip() {
-        if (_JSZipRef) return _JSZipRef;
-        if (typeof JSZip !== 'undefined') return JSZip;
-        if (typeof unsafeWindow !== 'undefined' && typeof unsafeWindow.JSZip !== 'undefined') return unsafeWindow.JSZip;
-        if (typeof window !== 'undefined' && typeof window.JSZip !== 'undefined') return window.JSZip;
+function generateAttachmentsHTML(item) {
+    const links = Array.isArray(item.attachments) ? item.attachments : [];
+    if (links.length === 0) return '';
+    return links.map(u => {
+        const label = toFileName(u);
+        return `<a href="${u}" class="attachment-item" target="_blank">📎 ${label}</a>`;
+    }).join('');
+}
+
+function getJSZip() {
+    if (_JSZipRef) return _JSZipRef;
+    if (typeof JSZip !== 'undefined') return JSZip;
+    if (typeof unsafeWindow !== 'undefined' && typeof unsafeWindow.JSZip !== 'undefined') return unsafeWindow.JSZip;
+    if (typeof window !== 'undefined' && typeof window.JSZip !== 'undefined') return window.JSZip;
+    return null;
+}
+
+async function ensureJSZip() {
+    const existing = getJSZip();
+    if (existing) return existing;
+    if (Constants.DISABLE_SCRIPT_INJECTION) {
+        dlog('Script injection disabled due to CSP.', 'error');
         return null;
     }
-
-    async function ensureJSZip() {
-        const existing = getJSZip();
-        if (existing) return existing;
-        if (Constants.DISABLE_SCRIPT_INJECTION) {
-            dlog('Script injection disabled due to CSP.', 'error');
-            return null;
-        }
-        if (typeof GM_xmlhttpRequest !== 'undefined') {
-            for (const url of Constants.JSZIP_URLS) {
-                try {
-                    const lib = await new Promise((resolve, reject) => {
-                        GM_xmlhttpRequest({
-                            method: 'GET', url, responseType: 'blob',
-                            onload: (response) => {
-                                try {
-                                    const blobUrl = URL.createObjectURL(response.response);
-                                    const script = document.createElement('script');
-                                    script.src = blobUrl;
-                                    script.onload = () => {
-                                        URL.revokeObjectURL(blobUrl);
-                                        const loaded = getJSZip();
-                                        loaded ? resolve(loaded) : reject(new Error('JSZip not defined'));
-                                    };
-                                    script.onerror = () => { URL.revokeObjectURL(blobUrl); reject(new Error('JSZip script load failed')); };
-                                    document.head.appendChild(script);
-                                } catch (e) { reject(e); }
-                            },
-                            onerror: () => reject(new Error('JSZip download failed'))
-                        });
-                    });
-                    if (lib) return lib;
-                } catch (e) { }
-            }
-        }
+    if (typeof GM_xmlhttpRequest !== 'undefined') {
         for (const url of Constants.JSZIP_URLS) {
             try {
                 const lib = await new Promise((resolve, reject) => {
-                    const script = document.createElement('script');
-                    script.src = url;
-                    script.onload = () => {
-                        const loaded = getJSZip();
-                        loaded ? resolve(loaded) : reject(new Error('JSZip not defined'));
-                    };
-                    script.onerror = () => reject(new Error('JSZip load failed'));
-                    document.head.appendChild(script);
+                    GM_xmlhttpRequest({
+                        method: 'GET', url, responseType: 'blob',
+                        onload: (response) => {
+                            try {
+                                const blobUrl = URL.createObjectURL(response.response);
+                                const script = document.createElement('script');
+                                script.src = blobUrl;
+                                script.onload = () => {
+                                    URL.revokeObjectURL(blobUrl);
+                                    const loaded = getJSZip();
+                                    loaded ? resolve(loaded) : reject(new Error('JSZip not defined'));
+                                };
+                                script.onerror = () => { URL.revokeObjectURL(blobUrl); reject(new Error('JSZip script load failed')); };
+                                document.head.appendChild(script);
+                            } catch (e) { reject(e); }
+                        },
+                        onerror: () => reject(new Error('JSZip download failed'))
+                    });
                 });
                 if (lib) return lib;
             } catch (e) { }
         }
-        throw new Error('All JSZip CDN attempts failed');
     }
-
-    async function downloadCollectedData() {
-        if (ExporterCore.collectedData.size === 0) return false;
-        normalizeConversation();
-
-        if (ExporterCore.exportMode === 'text') {
-            downloadTextOnly();
-            return true;
-        }
-
-        let JSZipLib = getJSZip();
-        if (!JSZipLib) {
-            try { JSZipLib = await ensureJSZip(); } catch (e) { console.error('ensureJSZip failed:', e); }
-        }
-        while (!JSZipLib) {
-            const action = await UIManager.showZipFallbackPrompt();
-            if (action === 'text') {
-                downloadTextOnly();
-                return true;
-            }
-            if (action === 'retry') {
-                try { JSZipLib = await ensureJSZip(); } catch (e) { }
-                continue;
-            }
-            return false;
-        }
-        const zip = new JSZipLib();
-        const imgFolder = zip.folder("images");
-        const fileFolder = zip.folder("files");
-
-        const [imgMap, fileMap] = await Promise.all([
-            processImages(imgFolder),
-            processFiles(fileFolder)
-        ]);
-
-        if (ExporterCore.exportMode === 'html') {
-            const content = generateHTMLContent(imgMap, fileMap);
-            zip.file("chat_history.html", content);
-        } else {
-            const content = generateMarkdownContent(imgMap, fileMap);
-            zip.file("chat_history.md", content);
-        }
-
-        let zipBlob;
+    for (const url of Constants.JSZIP_URLS) {
         try {
-            zipBlob = await Promise.race([
-                zip.generateAsync({ type: "blob" }),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('ZIP timeout')), 15000))
-            ]);
-        } catch (e) {
-            const action = await UIManager.showZipFallbackPrompt();
-            if (action === 'text') {
-                downloadTextOnly();
-                return true;
-            }
-            if (action === 'retry') {
-                try {
-                    zipBlob = await zip.generateAsync({ type: "blob" });
-                } catch (_) {
-                    downloadTextOnly();
-                    return true;
-                }
-            } else {
-                return false;
-            }
-        }
-        ExporterCore.cachedBlob = zipBlob;
-        downloadBlob(zipBlob, `Gemini_Chat_v14_${Date.now()}.zip`);
+            const lib = await new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = url;
+                script.onload = () => {
+                    const loaded = getJSZip();
+                    loaded ? resolve(loaded) : reject(new Error('JSZip not defined'));
+                };
+                script.onerror = () => reject(new Error('JSZip load failed'));
+                document.head.appendChild(script);
+            });
+            if (lib) return lib;
+        } catch (e) { }
+    }
+    throw new Error('All JSZip CDN attempts failed');
+}
+
+async function downloadCollectedData() {
+    if (ExporterCore.collectedData.size === 0) return false;
+    normalizeConversation();
+
+    if (ExporterCore.exportMode === 'text') {
+        downloadTextOnly();
         return true;
     }
 
+    let JSZipLib = getJSZip();
+    if (!JSZipLib) {
+        try { JSZipLib = await ensureJSZip(); } catch (e) { console.error('ensureJSZip failed:', e); }
+    }
+    while (!JSZipLib) {
+        const action = await UIManager.showZipFallbackPrompt();
+        if (action === 'text') {
+            downloadTextOnly();
+            return true;
+        }
+        if (action === 'retry') {
+            try { JSZipLib = await ensureJSZip(); } catch (e) { }
+            continue;
+        }
+        return false;
+    }
+    const zip = new JSZipLib();
+    const imgFolder = zip.folder("images");
+    const fileFolder = zip.folder("files");
 
+    const [imgMap, fileMap] = await Promise.all([
+        processImages(imgFolder),
+        processFiles(fileFolder)
+    ]);
 
-    // Resource fetcher: supports GM_xmlhttpRequest and fetch, with timeout / 资源下载：支持 GM_xmlhttpRequest 与 fetch，并内置超时
-    function fetchResource(url) {
-        const timeoutMs = 10000;
-        return new Promise((resolve) => {
-            let settled = false;
-            const timeout = setTimeout(() => { if (!settled) { settled = true; debugLog(`Resource fetch timed out: ${url}`, 'error'); resolve(null); } }, timeoutMs);
-            const finish = (val) => { if (!settled) { settled = true; clearTimeout(timeout); resolve(val); } };
-
-            if (typeof GM_xmlhttpRequest !== 'undefined') {
-                GM_xmlhttpRequest({
-                    method: "GET",
-                    url: url,
-                    responseType: "blob",
-                    onload: (response) => {
-                        if (response.status >= 200 && response.status < 300) {
-                            finish(response.response);
-                        } else {
-                            console.warn(`Resource fetch failed with status ${response.status}:`, url);
-                            debugLog(`Resource fetch failed (${response.status}): ${url}`, 'error');
-                            finish(null);
-                        }
-                    },
-                    onerror: () => { debugLog(`Resource fetch network error: ${url}`, 'error'); finish(null); }
-                });
-            } else {
-                fetch(url, { credentials: 'include' })
-                    .then(r => {
-                        if (r.ok) return r.blob();
-                        debugLog(`Fetch failed (${r.status}): ${url}`, 'error');
-                        return null;
-                    })
-                    .then(finish)
-                    .catch(() => { debugLog(`Fetch error: ${url}`, 'error'); finish(null); });
-            }
-        });
+    if (ExporterCore.exportMode === 'html') {
+        const content = generateHTMLContent(imgMap, fileMap);
+        zip.file("chat_history.html", content);
+    } else {
+        const content = generateMarkdownContent(imgMap, fileMap);
+        zip.file("chat_history.md", content);
     }
 
-    function downloadBlob(blob, name) {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = name;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    }
-
-    function endProcess(status, msg) {
-        if (ExporterCore.hasFinished) return;
-        ExporterCore.hasFinished = true;
-        ExporterCore.isRunning = false;
-
-        if (status === "FINISHED") {
-            if (ExporterCore.collectedData.size > 0) {
-                downloadCollectedData().then(() => {
-                    UIManager.update('FINISHED', ExporterCore.collectedData.size);
-                }).catch(err => {
-                    console.error("Failed to generate and download file:", err);
-                    UIManager.update('ERROR', t('err_runtime') + err.message);
-                });
-            } else {
-                UIManager.update('ERROR', t('err_no_data'));
+    let zipBlob;
+    try {
+        zipBlob = await Promise.race([
+            zip.generateAsync({ type: "blob" }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('ZIP timeout')), 15000))
+        ]);
+    } catch (e) {
+        const action = await UIManager.showZipFallbackPrompt();
+        if (action === 'text') {
+            downloadTextOnly();
+            return true;
+        }
+        if (action === 'retry') {
+            try {
+                zipBlob = await zip.generateAsync({ type: "blob" });
+            } catch (_) {
+                downloadTextOnly();
+                return true;
             }
         } else {
-            UIManager.update('ERROR', msg);
+            return false;
         }
     }
+    ExporterCore.cachedBlob = zipBlob;
+    downloadBlob(zipBlob, `Gemini_Chat_v14_${Date.now()}.zip`);
+    return true;
+}
 
-    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-    // Global ESC handler: show cancel prompt and proceed based on choice / 全局 ESC 处理：弹出取消提示并根据选择继续或回退
-    document.addEventListener('keydown', async e => {
-        if (e.key !== 'Escape') return;
-        if (!ExporterCore.isRunning || UIManager.isHandlingEscape) return;
-        UIManager.isHandlingEscape = true;
-        try {
-            ExporterCore.cancelRequested = true;
-            const choice = await UIManager.showCancelPrompt();
-            if (choice === 'text') {
-                normalizeConversation();
-                ExporterCore.exportMode = 'text';
-                try { await downloadTextOnly(); } catch (err) { dlog('Text export failed: ' + (err && err.message ? err.message : 'error'), 'error'); }
-                UIManager.update('FINISHED', ExporterCore.collectedData.size);
-                ExporterCore.isRunning = false;
-            } else if (choice === 'retry') {
-                ExporterCore.cancelRequested = false;
-                ExporterCore.exportMode = 'full';
-                ExporterCore.isRunning = true;
-                try { await downloadCollectedData(); } catch (err) { dlog('Retry export failed: ' + (err && err.message ? err.message : 'error'), 'error'); }
-            } else {
-                ExporterCore.isRunning = false;
-                if (UIManager.overlay) UIManager.overlay.style.display = 'none';
-            }
-        } finally {
-            UIManager.isHandlingEscape = false;
+
+// Resource fetcher: supports GM_xmlhttpRequest and fetch, with timeout / 资源下载：支持 GM_xmlhttpRequest 与 fetch，并内置超时
+function fetchResource(url) {
+    const timeoutMs = 10000;
+    return new Promise((resolve) => {
+        let settled = false;
+        const timeout = setTimeout(() => { if (!settled) { settled = true; debugLog(`Resource fetch timed out: ${url}`, 'error'); resolve(null); } }, timeoutMs);
+        const finish = (val) => { if (!settled) { settled = true; clearTimeout(timeout); resolve(val); } };
+
+        if (typeof GM_xmlhttpRequest !== 'undefined') {
+            GM_xmlhttpRequest({
+                method: "GET",
+                url: url,
+                responseType: "blob",
+                onload: (response) => {
+                    if (response.status >= 200 && response.status < 300) {
+                        finish(response.response);
+                    } else {
+                        console.warn(`Resource fetch failed with status ${response.status}:`, url);
+                        debugLog(`Resource fetch failed (${response.status}): ${url}`, 'error');
+                        finish(null);
+                    }
+                },
+                onerror: () => { debugLog(`Resource fetch network error: ${url}`, 'error'); finish(null); }
+            });
+        } else {
+            fetch(url, { credentials: 'include' })
+                .then(r => {
+                    if (r.ok) return r.blob();
+                    debugLog(`Fetch failed (${r.status}): ${url}`, 'error');
+                    return null;
+                })
+                .then(finish)
+                .catch(() => { debugLog(`Fetch error: ${url}`, 'error'); finish(null); });
         }
     });
+}
 
-    NetworkInterceptor.init();
-    ExporterCore.initSessionMonitor();
-    setInterval(() => UIManager.createEntryButton(), 2000);
-})();
+function downloadBlob(blob, name) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function endProcess(status, msg) {
+    if (ExporterCore.hasFinished) return;
+    ExporterCore.hasFinished = true;
+    ExporterCore.isRunning = false;
+
+    if (status === "FINISHED") {
+        if (ExporterCore.collectedData.size > 0) {
+            downloadCollectedData().then(() => {
+                UIManager.update('FINISHED', ExporterCore.collectedData.size);
+            }).catch(err => {
+                console.error("Failed to generate and download file:", err);
+                UIManager.update('ERROR', t('err_runtime') + err.message);
+            });
+        } else {
+            UIManager.update('ERROR', t('err_no_data'));
+        }
+    } else {
+        UIManager.update('ERROR', msg);
+    }
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Global ESC handler: show cancel prompt and proceed based on choice / 全局 ESC 处理：弹出取消提示并根据选择继续或回退
+document.addEventListener('keydown', async e => {
+    if (e.key !== 'Escape') return;
+    if (!ExporterCore.isRunning || UIManager.isHandlingEscape) return;
+    UIManager.isHandlingEscape = true;
+    try {
+        ExporterCore.cancelRequested = true;
+        const choice = await UIManager.showCancelPrompt();
+        if (choice === 'text') {
+            normalizeConversation();
+            ExporterCore.exportMode = 'text';
+            try { await downloadTextOnly(); } catch (err) { dlog('Text export failed: ' + (err && err.message ? err.message : 'error'), 'error'); }
+            UIManager.update('FINISHED', ExporterCore.collectedData.size);
+            ExporterCore.isRunning = false;
+        } else if (choice === 'retry') {
+            ExporterCore.cancelRequested = false;
+            ExporterCore.exportMode = 'full';
+            ExporterCore.isRunning = true;
+            try { await downloadCollectedData(); } catch (err) { dlog('Retry export failed: ' + (err && err.message ? err.message : 'error'), 'error'); }
+        } else {
+            ExporterCore.isRunning = false;
+            if (UIManager.overlay) UIManager.overlay.style.display = 'none';
+        }
+    } finally {
+        UIManager.isHandlingEscape = false;
+    }
+});
+
+NetworkInterceptor.init();
+ExporterCore.initSessionMonitor();
+setInterval(() => UIManager.createEntryButton(), 2000);
+}) ();
 
