@@ -23,12 +23,14 @@
 
 This UserScript solves the problem of "Virtual Scrolling" in Google AI Studio, allowing you to export your full chat history with Gemini.
 
-*   **🧠 Smart Auto-Scrolling**: Automatically scrolls through the chat history to load all content (solving the DOM detachment issue).
-*   **🛡️ Active Detection**: Works perfectly even on fresh page loads (no manual scrolling needed).
-*   **🧹 Clean Output**: Removes UI garbage (buttons, icons, "Run/Edit" text) and keeps only the dialogue.
+*   **⚡ XHR Mode (Instant)**: Intercepts network requests to capture data instantly without scrolling.
+*   **🧠 Smart Auto-Scrolling**: Fallback DOM-based scrolling to load all content (solving the DOM detachment issue).
+*   **🔄 Session Isolation**: Automatically detects URL changes and resets the exporter to prevent data contamination.
+*   **📊 Real-time Badge**: A red badge on the export button shows the number of captured turns in real-time.
+*   **📄 Multiple Formats**: Supports **Markdown (ZIP)**, **HTML**, and **Plain Text** exports.
+*   **🧹 Clean Output**: Removes UI garbage and keeps only the dialogue, including "Thinking" processes.
 *   **🎨 Interactive UI**: Beautiful overlay with progress tracking, countdown, and status indicators.
-*   **📄 Text-First Export**: Prefer Markdown output; attachments are integrated as clickable links. In CSP-restricted environments, ZIP is disabled, a top banner informs the policy, and the “With Attachments” button is disabled with a hint.
-*   **🔒 Safety Lock**: Prevents double-downloads and allows emergency stop via `ESC` key.
+*   **🔒 Safety Lock**: Allows emergency stop via `ESC` key.
 
 ### 📦 Installation
 
@@ -36,32 +38,32 @@ This UserScript solves the problem of "Virtual Scrolling" in Google AI Studio, a
     > ⚠️ **Note**: Tampermonkey is currently **NOT** supported.
 2.  [👉 Click here to install](https://github.com/GhostXia/Google-AI-Studio-Exporter/raw/main/google-ai-studio-exporter.user.js)
 3.  Open [Google AI Studio](https://aistudio.google.com/).
-4.  You will see a **"🚀 Export Chat"** button on the top right.
+4.  You will see a **"🚀 Export"** button on the bottom right.
 
 ### 📖 Usage
 
-1.  Click the **Export Button** on the top right corner.
-2.  Wait for the **3-second countdown** (Do not touch your mouse!).
-3.  The script will **automatically scroll** to the top and then down to capture all messages.
-4.  Once finished, a `.md` file will be downloaded automatically.
-5.  Recommended: choose “📄 Text Only” for a text-first export with embedded links.
+1.  Click the **Export Button** on the bottom right corner.
+2.  Choose your preferred **Extraction Mode** in Settings (XHR is recommended).
+3.  Select the **Export Format** (ZIP, HTML, or Text).
+4.  Wait for the process to complete (or watch the badge count up!).
+5.  Once finished, the file will be downloaded automatically.
 
-> **Tip**: Press `ESC` key at any time to stop scrolling and save what has been captured so far.
+> **Tip**: Press `ESC` key at any time to stop and save what has been captured so far.
 
 ### 📝 Example Output
 
 ```text
 Google AI Studio Chat History
-Time: 2025/11/25 19:30:00
-Count: 42
-========================================
+Time: 2025/12/31 20:00:00
+Turns: 42
+----------------------------------------
 
-### User:
+## User
 Analyze the provided code snippet.
 
-----------------------------------------------------------------
+---
 
-### Gemini:
+## Gemini
 Here is the analysis of the code...
 [Code block content...]
 ```
@@ -76,12 +78,14 @@ Here is the analysis of the code...
 
 这个脚本解决了 Google AI Studio 因“虚拟滚动”导致无法获取完整历史记录的问题。
 
-*   **🧠 智能自动滚动**：全自动模拟滚动加载，确保抓取所有历史对话。
-*   **🛡️ 主动探测机制**：v14内核，解决冷启动找不到滚动条的问题。
-*   **🧹 数据清洗**：自动去除按钮、图标、引用来源等干扰信息，只保留纯净文本。
-*   **🎨 交互式 UI**：带有倒计时、进度显示和状态提示的漂亮界面。
-*   **📄 以纯文本为主**：优先导出 Markdown；附件统一整合为可点击链接。CSP 环境禁用 ZIP，顶部横幅提示策略，模式选择界面“包含附件”按钮禁用并显示“（已合并至纯文本）”。
-*   **🔒 安全机制**：防止重复下载，支持按 `ESC` 键随时中断并保存。
+*   **⚡ XHR 模式 (极速)**：拦截网络请求，无需滚动即可瞬间获取完整数据。
+*   **🧠 智能自动滚动**：备用 DOM 滚动机制，确保在各种环境下都能抓取所有历史对话。
+*   **🔄 会话隔离**：自动监测 URL 变化并重置状态，防止不同对话间的数据污染。
+*   **📊 实时计数徽章**：导出按钮上带有红色徽章，实时显示已捕获的对话轮数。
+*   **📄 多格式支持**：支持 **Markdown (ZIP)**、**HTML** 以及 **纯文本** 导出。
+*   **🧹 数据清洗**：自动去除 UI 干扰信息，保留纯净文本，支持“思考过程”导出。
+*   **🎨 交互式 UI**：带有进度显示、倒计时和状态提示的精美界面。
+*   **🔒 安全机制**：支持按 `ESC` 键随时中断并保存。
 
 ### 📦 安装方法
 
@@ -89,112 +93,57 @@ Here is the analysis of the code...
     > ⚠️ **注意**：暂不支持 Tampermonkey，请使用 OrangeMonkey。
 2.  [👉 点击这里安装](https://github.com/GhostXia/Google-AI-Studio-Exporter/raw/main/google-ai-studio-exporter.user.js)
 3.  打开 [Google AI Studio](https://aistudio.google.com/)。
-4.  你会看到右上角出现一个 **"🚀 导出对话"** 按钮。
+4.  你会看到右下角出现一个 **"🚀 导出"** 按钮。
 
 ### 📖 使用指南
 
-1.  点击右上角的 **导出按钮**。
-2.  等待 **3秒倒计时**（请勿操作鼠标！）。
-3.  脚本将 **自动滚动** 到顶部，然后向下滚动以抓取所有消息。
-4.  完成后，会自动下载一个 `.md` 文件。
-5.  建议：选择“📄 纯文本”进行以文本为主的导出，附件以链接形式整合。
+1.  点击右下角的 **导出按钮**。
+2.  在设置中选择 **提取模式**（推荐使用 XHR 模式）。
+3.  选择 **导出格式**（ZIP、HTML 或 纯文本）。
+4.  等待处理完成（或者观察徽章计数！）。
+5.  完成后，文件将自动下载。
 
-> **提示**：随时按 `ESC` 键可停止滚动并保存已抓取的内容。
+> **提示**：随时按 `ESC` 键可停止并保存已抓取的内容。
 
 ### 📝 导出示例
 
 ```text
-Google AI Studio 完整对话记录
-时间: 2025/11/25 19:30:00
-条数: 42
-========================================
+Google AI Studio 聊天记录
+时间: 2025/12/31 20:00:00
+回合数: 42
+----------------------------------------
 
-### User:
-Analyze the provided code snippet.
-
-----------------------------------------------------------------
-
-### Gemini:
-Here is the analysis of the code...
-[Code block content...]
-```
+## 用户
+请分析这段代码。
 
 ---
+
+## Gemini
+这是对代码的分析...
+[代码块内容...]
+```
 
 ---
 
 ## 📜 License
 
 AGPL-3.0 License
-### 📎 Attachments Handling
 
-- Due to strict site CSP policies, dynamic script injection is disabled; packaging attachments into a ZIP may be unavailable.
-- The exporter now consolidates attachments into the Markdown as clickable links, e.g. `[image.jpg](https://...)` and `[file.pdf](https://...)`.
-- In the mode selection UI, the “📦 With Attachments” button is disabled. Choose “📄 Text Only” to export a Markdown file with embedded links for attachments.
-- Press `ESC` during packaging to cancel and save the current progress.
+### 📎 Attachments Handling / 附件处理
 
-### 🔗 Link Normalization & Safety
+- Supports images and various file types (PDF, CSV, TXT, etc.).
+- In **ZIP** mode, attachments are packaged into folders.
+- In **HTML/Text** mode, attachments are integrated as clickable links.
+- **Note**: Due to site CSP, ZIP packaging may require OrangeMonkey's advanced permissions.
 
-- Supports relative URLs from SPA contexts; every `href` is normalized using `new URL(href, window.location.href)`.
-- Filters protocols simply and predictably: allows `http:`/`https:` (`blob:` allowed when fallback is enabled), rejects `#`/invalid URLs.
-- Hardens hostname checks: `host === domain || host.endsWith('.' + domain)` to avoid false positives like `evil-googleapis.com`.
-- Extracted links are deduplicated and kept as absolute URLs in the final Markdown.
-- Each export starts with a fresh scan state; attachment hover-scan markers are reset to avoid skipping turns from a previous run.
+### 🧾 Changelog (1.6.0) / 变更记录
 
-### ⚙️ Configuration
-
-- `ATTACHMENT_COMBINED_FALLBACK`: When `true`, shows an attachments section with “link unavailable” only if a scan was attempted but found nothing.
-- `ATTACHMENT_MAX_DIST`: Pixel threshold to associate a download icon with a hovered image (UI proximity heuristic).
-- `normalizeHref(href)`: Internally normalizes any `href` to an absolute URL; invalid or `#` are ignored.
-- Attachment scanning is performed per turn; images are hovered to reveal download icons and collect stable links.
-
-### 🛠 Troubleshooting
-
-- If some attachment links are missing in long chats, use the text-only export; all resources embedded in text are converted to clickable links.
-- In strict CSP environments, ZIP packaging is disabled by design; attachments appear as Markdown links instead.
-- For SPAs with unconventional link patterns, normalization ensures consistent absolute URLs; verify final Markdown if custom routers are used.
-
-### 🧾 Changelog (1.5.0)
-
-- Unified attachment rendering via `generateAttachmentsMarkdown()` with improved label escaping.
-- Added robust link normalization and hardened hostname matching.
-- Reset export scan state at start to avoid skipping previously scanned turns.
-- Refactored resource file name extraction with query-parameter fallback and decoding.
-
-### 📎 附件处理说明
-
-- 由于站点 CSP 策略严格，禁止动态脚本注入；附件打包 ZIP 在多数环境下不可用。
-- 现已将附件“以链接形式”整合进 Markdown，如 `[image.jpg](https://...)`、`[file.pdf](https://...)`，点击即可访问原文件。
-- 在模式选择界面，“📦 包含附件”按钮已禁用，后方显示“（已合并至纯文本）”。请选择“📄 纯文本”进行导出。
-- 打包阶段可按 `ESC` 取消并保存当前进度。
-
-### 🔗 链接规范化与安全
-
-- 支持 SPA 中的相对链接；所有 `href` 通过 `new URL(href, window.location.href)` 规范化为绝对地址。
-- 协议过滤简洁明确：允许 `http:`/`https:`（在启用回退时允许 `blob:`），拒绝 `#`/无效地址。
-- 域名校验加固：使用 `host === domain` 或 `host.endsWith('.' + domain)`，避免 `evil-googleapis.com` 等伪装误判。
-- 抽取的链接去重并以绝对地址写入最终 Markdown。
-- 每次导出都会重置扫描状态；避免由于上次运行的缓存而跳过附件扫描。
-
-### ⚙️ 配置项
-
-- `ATTACHMENT_COMBINED_FALLBACK`：为 `true` 时，仅在本回合尝试过附件扫描但未发现链接时，显示“链接不可用”占位。
-- `ATTACHMENT_MAX_DIST`：用于将图片与下载图标建立关联的距离阈值（像素）。
-- `normalizeHref(href)`：内部将任意 `href` 规范化为绝对地址；无效或 `#` 将忽略。
-- 每个回合都会分别进行图片 hover 扫描，以收集稳定的下载链接。
-
-### 🛠 故障排查
-
-- 若长会话中出现个别附件链接缺失，建议选择“纯文本导出”，脚本会将文本中的所有资源转换为可点击链接。
-- 在严格 CSP 环境中，ZIP 打包被设计为禁用；附件已统一以 Markdown 链接形式呈现。
-- 对于使用自定义路由的 SPA，规范化逻辑可确保生成绝对地址；如有特殊情况，请检查最终 Markdown。
-
-### 🧾 变更记录（1.5.0）
-
-- 通过 `generateAttachmentsMarkdown()` 统一附件渲染，并改进标签转义。
-- 增强链接规范化与域名校验，避免伪造域名误判。
-- 在导出开始时重置扫描状态，避免跳过已扫描回合。
-- 改进文件名提取，支持查询参数回退并统一解码。
+- **Architecture**: Full refactor into modular classes (`UIManager`, `ExporterCore`, etc.).
+- **XHR Mode**: Added instant data extraction via network interception.
+- **Session Isolation**: Added URL monitoring to reset state on conversation switch.
+- **HTML Export**: Added a new polished HTML export format.
+- **Real-time Badge**: Added a turn counter badge to the export button.
+- **Bilingual Code**: Updated all script comments to be bilingual (CN/EN).
 
 ---
 
