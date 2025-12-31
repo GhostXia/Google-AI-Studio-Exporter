@@ -606,6 +606,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     // XHR 状态 (新增)
     let capturedChatData = null;
     let capturedTimestamp = 0;
+    let currentConversationId = null;
 
     // 配置 (新增)
     const DEFAULT_CONFIG = {
@@ -659,8 +660,155 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     loadSettings();
 
     // ==========================================
+    // 5. 缓存管理 (新增)
+    // ==========================================
+    
+    /**
+     * 解析当前对话的 ID
+     * 从 URL 或页面元素中提取唯一标识符
+     */
+    function getCurrentConversationId() {
+        const url = window.location.href;
+        
+        // 检查是否有 conversation ID 在 URL 中
+        const urlMatch = url.match(/conversation\/([^/?]+)/i) || url.match(/prompt\/([^/?]+)/i);
+        if (urlMatch && urlMatch[1]) {
+            return urlMatch[1];
+        }
+        
+        // 作为后备，使用页面标题或其他唯一标识
+        const title = document.title;
+        const domain = window.location.hostname;
+        const path = window.location.pathname;
+        
+        // 生成简单的哈希作为唯一标识
+        const hash = Array.from(`${title}${domain}${path}`)
+            .reduce((acc, char) => acc + char.charCodeAt(0), 0)
+            .toString(36);
+        
+        return `fallback_${hash}`;
+    }
+    
+    /**
+     * 从缓存加载对话数据
+     */
+    function loadCachedConversationData() {
+        const conversationId = getCurrentConversationId();
+        if (!conversationId) return null;
+        
+        try {
+            const cached = GM_getValue(`aistudio_cache_${conversationId}`, null);
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                console.log(`[AI Studio Exporter] 从缓存加载对话数据: ${conversationId}`);
+                return parsed;
+            }
+        } catch (err) {
+            console.log(`[AI Studio Exporter] 加载缓存失败: ${err.message}`);
+        }
+        return null;
+    }
+    
+    /**
+     * 保存对话数据到缓存
+     */
+    function saveConversationDataToCache(data) {
+        const conversationId = getCurrentConversationId();
+        if (!conversationId || !data) return false;
+        
+        try {
+            const cacheData = {
+                data: data,
+                timestamp: Date.now(),
+                conversationId: conversationId
+            };
+            GM_setValue(`aistudio_cache_${conversationId}`, JSON.stringify(cacheData));
+            console.log(`[AI Studio Exporter] 对话数据保存到缓存: ${conversationId}`);
+            return true;
+        } catch (err) {
+            console.log(`[AI Studio Exporter] 保存缓存失败: ${err.message}`);
+            return false;
+        }
+    }
+    
+    /**
+     * 检查缓存是否有效
+     */
+    function isCacheValid(timestamp, maxAgeMs = 3600000) { // 默认1小时有效
+        const age = Date.now() - timestamp;
+        return age < maxAgeMs;
+    }
+    
+    /**
+     * 清除过期缓存
+     */
+    function cleanupExpiredCache() {
+        try {
+            // 注意：GM_listValues 可能不可用，需要检查支持
+            if (typeof GM_listValues !== 'function') {
+                console.log(`[AI Studio Exporter] GM_listValues 不可用，跳过缓存清理`);
+                return;
+            }
+            
+            const keys = GM_listValues();
+            const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000); // 24小时
+            
+            keys.forEach(key => {
+                if (key.startsWith('aistudio_cache_')) {
+                    try {
+                        const cached = JSON.parse(GM_getValue(key, '{}'));
+                        if (cached.timestamp && cached.timestamp < oneDayAgo) {
+                            GM_deleteValue(key);
+                            console.log(`[AI Studio Exporter] 清除过期缓存: ${key}`);
+                        }
+                    } catch (err) {
+                        GM_deleteValue(key);
+                    }
+                }
+            });
+        } catch (err) {
+            console.log(`[AI Studio Exporter] 缓存清理失败: ${err.message}`);
+        }
+    }
+    
+    /**
+     * 清除除当前对话外的所有缓存
+     * 用于切换对话时保持缓存清洁
+     */
+    function clearOldCaches() {
+        try {
+            // 注意：GM_listValues 可能不可用，需要检查支持
+            if (typeof GM_listValues !== 'function') {
+                console.log(`[AI Studio Exporter] GM_listValues 不可用，跳过旧缓存清理`);
+                return;
+            }
+            
+            const currentConversationId = getCurrentConversationId();
+            const keys = GM_listValues();
+            
+            keys.forEach(key => {
+                if (key.startsWith('aistudio_cache_')) {
+                    // 只保留当前对话的缓存
+                    const cacheId = key.replace('aistudio_cache_', '');
+                    if (cacheId !== currentConversationId) {
+                        GM_deleteValue(key);
+                        console.log(`[AI Studio Exporter] 切换对话，清除旧缓存: ${key}`);
+                    }
+                }
+            });
+        } catch (err) {
+            console.log(`[AI Studio Exporter] 旧缓存清理失败: ${err.message}`);
+        }
+    }
+    
+    // 初始化时清理过期缓存
+    cleanupExpiredCache();
+
+    // ==========================================
     // 4. XHR 拦截器 (新增 - 核心功能)
     // ==========================================
+    console.log("[AI Studio Exporter] 正在设置 XHR 拦截器...");
+    
     const originalOpen = XMLHttpRequest.prototype.open;
     const originalSend = XMLHttpRequest.prototype.send;
 
@@ -689,17 +837,23 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                             json = [json];
                         }
 
-                        dlog(`${endpoint} intercepted. Size: ${rawText.length} chars.`);
+                        console.log(`[AI Studio Exporter] ${endpoint} intercepted. Size: ${rawText.length} chars.`);
+                        console.log(`[AI Studio Exporter] Captured data structure:`, json);
                         capturedChatData = json;
                         capturedTimestamp = Date.now();
+                        console.log(`[AI Studio Exporter] Data captured at: ${new Date(capturedTimestamp).toLocaleTimeString()}`);
+                        // 保存到缓存
+                        saveConversationDataToCache(json);
                     }
                 } catch (err) {
-                    dlog(`XHR interceptor error: ${err.message}`);
+                    console.log(`[AI Studio Exporter] XHR interceptor error: ${err.message}`);
                 }
             }
         });
         return originalSend.apply(this, arguments);
     };
+
+    console.log("[AI Studio Exporter] XHR 拦截器设置完成");
 
     // XHR 解析逻辑 (新增)
     function isTurn(arr) {
@@ -1431,30 +1585,59 @@ function isResponseTurn(turn) {
     // Main export flow: mode select → countdown → capture → export
 
     async function processXHRData() {
-        dlog("开始处理 XHR 数据...");
+        console.log("[AI Studio Exporter] 开始处理 XHR 数据...");
+        console.log(`[AI Studio Exporter] 当前提取模式: ${CONFIG.EXTRACTION_MODE}`);
+        console.log(`[AI Studio Exporter] capturedChatData 存在: ${!!capturedChatData}`);
+        console.log(`[AI Studio Exporter] capturedTimestamp: ${capturedTimestamp}`);
 
         const FRESHNESS_THRESHOLD_MS = 30000;
+        let chatDataToUse = capturedChatData;
+        let dataTimestamp = capturedTimestamp;
 
-        if (!capturedChatData) {
-            dlog("警告：没有捕获到 XHR 数据");
+        // 检查当前捕获的数据是否存在且新鲜
+        if (!capturedChatData || (Date.now() - capturedTimestamp > FRESHNESS_THRESHOLD_MS)) {
+            console.log("[AI Studio Exporter] 当前 XHR 数据不存在或已过期，尝试从缓存加载...");
+            
+            // 从缓存加载数据
+            const cachedData = loadCachedConversationData();
+            if (cachedData && cachedData.data && cachedData.timestamp) {
+                console.log(`[AI Studio Exporter] 成功从缓存加载数据，缓存时间: ${new Date(cachedData.timestamp).toLocaleTimeString()}`);
+                
+                // 检查缓存数据的有效性
+                const cacheAge = Date.now() - cachedData.timestamp;
+                if (isCacheValid(cachedData.timestamp, FRESHNESS_THRESHOLD_MS * 4)) { // 允许缓存数据稍微旧一点
+                    chatDataToUse = cachedData.data;
+                    dataTimestamp = cachedData.timestamp;
+                    console.log(`[AI Studio Exporter] 缓存数据有效，将用于导出`);
+                } else {
+                    console.log(`[AI Studio Exporter] 缓存数据已过期 (${cacheAge}ms)，无法使用`);
+                    return false;
+                }
+            } else {
+                console.log("[AI Studio Exporter] 缓存中没有找到有效数据");
+                console.log("[AI Studio Exporter] 提示：请确保在打开对话前脚本已经加载，或刷新页面后重试");
+                return false;
+            }
+        }
+
+        const dataAge = Date.now() - dataTimestamp;
+        console.log(`[AI Studio Exporter] XHR 数据年龄: ${dataAge}ms (阈值: ${FRESHNESS_THRESHOLD_MS}ms)`);
+
+        if (dataAge > FRESHNESS_THRESHOLD_MS * 4) { // 调整阈值以允许缓存数据
+            console.log(`[AI Studio Exporter] 警告：XHR 数据过旧（${dataAge}ms），可能已过期`);
             return false;
         }
 
-        const dataAge = Date.now() - capturedTimestamp;
-        if (dataAge > FRESHNESS_THRESHOLD_MS) {
-            dlog(`警告：XHR 数据过旧（${dataAge}ms），可能已过期`);
-            return false;
-        }
+        console.log(`[AI Studio Exporter] XHR 数据新鲜度：${dataAge}ms`);
 
-        dlog(`XHR 数据新鲜度：${dataAge}ms`);
-
-        const history = findHistoryRecursive(capturedChatData);
+        const history = findHistoryRecursive(chatDataToUse);
         if (!history || !Array.isArray(history) || history.length === 0) {
-            dlog("警告：从 XHR 数据中未找到有效的聊天历史");
+            console.log("[AI Studio Exporter] 警告：从 XHR 数据中未找到有效的聊天历史");
+            console.log("[AI Studio Exporter] capturedChatData 结构:", capturedChatData);
             return false;
         }
 
-        dlog(`找到 ${history.length} 个聊天回合`);
+        console.log(`[AI Studio Exporter] 找到 ${history.length} 个聊天回合`);
 
         let processedCount = 0;
         let turnOrder = [];
@@ -1507,10 +1690,10 @@ function isResponseTurn(turn) {
             turnOrder.push(turnId);
             processedCount++;
 
-            dlog(`处理回合 ${i + 1}/${history.length}: ${role}, 文本长度: ${text.length}`);
+            console.log(`[AI Studio Exporter] 处理回合 ${i + 1}/${history.length}: ${role}, 文本长度: ${text.length}`);
         }
 
-        dlog(`XHR 处理完成：成功处理 ${processedCount} 个回合`);
+        console.log(`[AI Studio Exporter] XHR 处理完成：成功处理 ${processedCount} 个回合`);
 
         updateTurnOrder(turnOrder);
         updateUI('SCROLLING', collectedData.size);
@@ -1543,14 +1726,17 @@ function isResponseTurn(turn) {
         // ========================================
         // 根据提取模式选择处理方式
         // ========================================
+        console.log(`[AI Studio Exporter] 当前配置的提取模式: ${CONFIG.EXTRACTION_MODE}`);
+        
         if (CONFIG.EXTRACTION_MODE === 'xhr') {
-            dlog("使用 XHR 模式提取数据");
+            console.log("[AI Studio Exporter] 使用 XHR 模式提取数据");
             const success = await processXHRData();
 
             if (!success) {
-                dlog("XHR 提取失败，回退到 DOM 模式");
+                console.log("[AI Studio Exporter] XHR 提取失败，回退到 DOM 模式");
                 updateUI('SCROLLING', 0);
             } else {
+                console.log("[AI Studio Exporter] XHR 提取成功，跳过 DOM 滚动");
                 endProcess("FINISHED");
                 return;
             }
@@ -2801,14 +2987,19 @@ function extractDownloadLinksFromTurn(el) {
 
     history.pushState = function() {
         clearCapturedData();
+        clearOldCaches(); // 切换对话时清除旧缓存
         return originalPushState.apply(this, arguments);
     };
 
     history.replaceState = function() {
         clearCapturedData();
+        clearOldCaches(); // 切换对话时清除旧缓存
         return originalReplaceState.apply(this, arguments);
     };
 
-    window.addEventListener('popstate', clearCapturedData);
+    window.addEventListener('popstate', function() {
+        clearCapturedData();
+        clearOldCaches(); // 切换对话时清除旧缓存
+    });
 })();
 
