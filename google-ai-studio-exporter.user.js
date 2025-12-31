@@ -17,6 +17,8 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_listValues
+// @grant        GM_deleteValue
 // @grant        unsafeWindow
 // @run-at       document-start
 // @connect      cdnjs.cloudflare.com
@@ -667,6 +669,20 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
      * 解析当前对话的 ID
      * 从 URL 或页面元素中提取唯一标识符
      */
+    function getCurrentConversationId() {
+        const url = window.location.href;
+        
+        // 检查是否有 conversation ID 在 URL 中
+        const urlMatch = url.match(/conversation\/([^/?]+)/i) || url.match(/prompt\/([^/?]+)/i);
+        if (urlMatch && urlMatch[1]) {
+            return urlMatch[1];
+        }
+        
+        // 作为后备，使用页面标题或其他唯一标识
+        const title = document.title;
+        const domain = window.location.hostname;
+        const path = window.location.pathname;
+        
         // Use a better string hash (djb2 algorithm)
         const hashString = `${title}${domain}${path}`;
         let hash = 5381;
@@ -674,6 +690,8 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             hash = ((hash << 5) + hash) + hashString.charCodeAt(i);
         }
         hash = (hash >>> 0).toString(36); // Convert to unsigned and base36
+        
+        return `fallback_${hash}`;
     }
     
     /**
@@ -745,11 +763,15 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                     try {
                         const cached = JSON.parse(GM_getValue(key, '{}'));
                         if (cached.timestamp && cached.timestamp < oneDayAgo) {
-                            GM_deleteValue(key);
-                            console.log(`[AI Studio Exporter] 清除过期缓存: ${key}`);
+                            if (typeof GM_deleteValue === 'function') {
+                                GM_deleteValue(key);
+                                console.log(`[AI Studio Exporter] 清除过期缓存: ${key}`);
+                            }
                         }
                     } catch (err) {
-                        GM_deleteValue(key);
+                        if (typeof GM_deleteValue === 'function') {
+                            GM_deleteValue(key);
+                        }
                     }
                 }
             });
@@ -778,8 +800,10 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                     // 只保留当前对话的缓存
                     const cacheId = key.replace('aistudio_cache_', '');
                     if (cacheId !== currentConversationId) {
-                        GM_deleteValue(key);
-                        console.log(`[AI Studio Exporter] 切换对话，清除旧缓存: ${key}`);
+                        if (typeof GM_deleteValue === 'function') {
+                            GM_deleteValue(key);
+                            console.log(`[AI Studio Exporter] 切换对话，清除旧缓存: ${key}`);
+                        }
                     }
                 }
             });
