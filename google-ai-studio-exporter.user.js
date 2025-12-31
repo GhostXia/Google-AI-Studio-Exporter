@@ -744,13 +744,13 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         return candidates.sort((a, b) => b.length - a.length)[0] || "";
     }
 
-    function isThinkingTurn(turn) {
-        return Array.isArray(turn) && turn.length > 19 && turn[19] === 1;
-    }
+function isThinkingTurn(turn) {
+    return Array.isArray(turn) && turn.length > 19 && turn[19] === 1; // 索引 19: 思考回合指示器
+}
 
-    function isResponseTurn(turn) {
-        return Array.isArray(turn) && turn.length > 16 && turn[16] === 1;
-    }
+function isResponseTurn(turn) {
+    return Array.isArray(turn) && turn.length > 16 && turn[16] === 1; // 索引 16: 回复回合指示器
+}
 
     // ==========================================
     // 5. Raw Mode 自动切换 (新增)
