@@ -978,7 +978,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                     let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
                     if (left < 8) left = 8;
                     if (left + tooltipRect.width > window.innerWidth - 8) {
-                        left = window.innerWidth - toggleTooltipElement.width - 8;
+                        left = window.innerWidth - tooltipRect.width - 8;
                     }
 
                     let top;
