@@ -667,26 +667,13 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
      * 解析当前对话的 ID
      * 从 URL 或页面元素中提取唯一标识符
      */
-    function getCurrentConversationId() {
-        const url = window.location.href;
-        
-        // 检查是否有 conversation ID 在 URL 中
-        const urlMatch = url.match(/conversation\/([^/?]+)/i) || url.match(/prompt\/([^/?]+)/i);
-        if (urlMatch && urlMatch[1]) {
-            return urlMatch[1];
+        // Use a better string hash (djb2 algorithm)
+        const hashString = `${title}${domain}${path}`;
+        let hash = 5381;
+        for (let i = 0; i < hashString.length; i++) {
+            hash = ((hash << 5) + hash) + hashString.charCodeAt(i);
         }
-        
-        // 作为后备，使用页面标题或其他唯一标识
-        const title = document.title;
-        const domain = window.location.hostname;
-        const path = window.location.pathname;
-        
-        // 生成简单的哈希作为唯一标识
-        const hash = Array.from(`${title}${domain}${path}`)
-            .reduce((acc, char) => acc + char.charCodeAt(0), 0)
-            .toString(36);
-        
-        return `fallback_${hash}`;
+        hash = (hash >>> 0).toString(36); // Convert to unsigned and base36
     }
     
     /**
