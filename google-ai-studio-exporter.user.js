@@ -89,17 +89,17 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             'title_cancel': '已取消导出',
             'status_cancel': '请选择继续打包附件或改为纯文本保存',
             'banner_top': '📎 附件已合并为 Markdown 链接（纯文本导出）',
-                'attachments_section': '附件',
-                'attachments_link_unavailable': '链接不可用',
-                'settings_title': '导出选项',
-                'settings_include_user': '包含用户消息',
-                'settings_include_model': '包含模型回复',
-                'settings_include_thinking': '包含思考过程',
-                'settings_collapsible_thinking': '可折叠思考过程',
-                'settings_extraction_method': '提取方式',
-                'settings_xhr': 'XHR',
-                'settings_dom': 'DOM',
-                'settings_tooltip': 'XHR: 通过网络即时捕获（推荐）\nDOM: 滚动界面提取（备用）'
+            'attachments_section': '附件',
+            'attachments_link_unavailable': '链接不可用',
+            'settings_title': '导出选项',
+            'settings_include_user': '包含用户消息',
+            'settings_include_model': '包含模型回复',
+            'settings_include_thinking': '包含思考过程',
+            'settings_collapsible_thinking': '可折叠思考过程',
+            'settings_extraction_method': '提取方式',
+            'settings_xhr': 'XHR',
+            'settings_dom': 'DOM',
+            'settings_tooltip': 'XHR: 通过网络即时捕获（推荐）\nDOM: 滚动界面提取（备用）'
             },
             'en': {
                 'btn_export': '🚀 Export',
@@ -143,17 +143,17 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             'title_cancel': 'Export cancelled',
             'status_cancel': 'Choose to continue attachments or save as text',
             'banner_top': '📎 Attachments merged as Markdown links (Text-only export)',
-                'attachments_section': 'Attachments',
-                'attachments_link_unavailable': 'link unavailable',
-                'settings_title': 'Export Options',
-                'settings_include_user': 'Include User Messages',
-                'settings_include_model': 'Include Model Responses',
-                'settings_include_thinking': 'Include Thinking',
-                'settings_collapsible_thinking': 'Collapsible Thinking',
-                'settings_extraction_method': 'Extraction Method',
-                'settings_xhr': 'XHR',
-                'settings_dom': 'DOM',
-                'settings_tooltip': 'XHR: Instant capture via network (recommended)\nDOM: Scrolls through UI to extract (fallback)'
+            'attachments_section': 'Attachments',
+            'attachments_link_unavailable': 'link unavailable',
+            'settings_title': 'Export Options',
+            'settings_include_user': 'Include User Messages',
+            'settings_include_model': 'Include Model Responses',
+            'settings_include_thinking': 'Include Thinking',
+            'settings_collapsible_thinking': 'Collapsible Thinking',
+            'settings_extraction_method': 'Extraction Method',
+            'settings_xhr': 'XHR',
+            'settings_dom': 'DOM',
+            'settings_tooltip': 'XHR: Instant capture via network (recommended)\nDOM: Scrolls through UI to extract (fallback)'
             }
         };
 
@@ -744,13 +744,13 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         return candidates.sort((a, b) => b.length - a.length)[0] || "";
     }
 
-    function isThinkingTurn(turn) {
-        return Array.isArray(turn) && turn.length > 19 && turn[19] === 1;
-    }
+function isThinkingTurn(turn) {
+    return Array.isArray(turn) && turn.length > 19 && turn[19] === 1; // 索引 19: 思考回合指示器
+}
 
-    function isResponseTurn(turn) {
-        return Array.isArray(turn) && turn.length > 16 && turn[16] === 1;
-    }
+function isResponseTurn(turn) {
+    return Array.isArray(turn) && turn.length > 16 && turn[16] === 1; // 索引 16: 回复回合指示器
+}
 
     // ==========================================
     // 5. Raw Mode 自动切换 (新增)
@@ -845,7 +845,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                 pointerEvents: 'none'
             });
 
-            this.shadowRoot = this.shadowHost.attachShadow({ mode: 'closed' });
+            this.shadowRoot = this.shadowHost.attachShadow({ mode: 'open' });
 
             const style = document.createElement('style');
             style.textContent = `
@@ -978,7 +978,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                     let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
                     if (left < 8) left = 8;
                     if (left + tooltipRect.width > window.innerWidth - 8) {
-                        left = window.innerWidth - toggleTooltipElement.width - 8;
+                        left = window.innerWidth - tooltipRect.width - 8;
                     }
 
                     let top;
