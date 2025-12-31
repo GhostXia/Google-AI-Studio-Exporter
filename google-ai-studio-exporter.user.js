@@ -667,26 +667,13 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
      * 解析当前对话的 ID
      * 从 URL 或页面元素中提取唯一标识符
      */
-    function getCurrentConversationId() {
-        const url = window.location.href;
-        
-        // 检查是否有 conversation ID 在 URL 中
-        const urlMatch = url.match(/conversation\/([^/?]+)/i) || url.match(/prompt\/([^/?]+)/i);
-        if (urlMatch && urlMatch[1]) {
-            return urlMatch[1];
+        // Use a better string hash (djb2 algorithm)
+        const hashString = `${title}${domain}${path}`;
+        let hash = 5381;
+        for (let i = 0; i < hashString.length; i++) {
+            hash = ((hash << 5) + hash) + hashString.charCodeAt(i);
         }
-        
-        // 作为后备，使用页面标题或其他唯一标识
-        const title = document.title;
-        const domain = window.location.hostname;
-        const path = window.location.pathname;
-        
-        // 生成简单的哈希作为唯一标识
-        const hash = Array.from(`${title}${domain}${path}`)
-            .reduce((acc, char) => acc + char.charCodeAt(0), 0)
-            .toString(36);
-        
-        return `fallback_${hash}`;
+        hash = (hash >>> 0).toString(36); // Convert to unsigned and base36
     }
     
     /**
@@ -1584,61 +1571,6 @@ function isResponseTurn(turn) {
     // 导出主流程：模式选择 → 倒计时 → 采集 → 导出
     // Main export flow: mode select → countdown → capture → export
 
-    async function processXHRData() {
-        console.log("[AI Studio Exporter] 开始处理 XHR 数据...");
-        console.log(`[AI Studio Exporter] 当前提取模式: ${CONFIG.EXTRACTION_MODE}`);
-        console.log(`[AI Studio Exporter] capturedChatData 存在: ${!!capturedChatData}`);
-        console.log(`[AI Studio Exporter] capturedTimestamp: ${capturedTimestamp}`);
-
-        const FRESHNESS_THRESHOLD_MS = 30000;
-        let chatDataToUse = capturedChatData;
-        let dataTimestamp = capturedTimestamp;
-
-        // 检查当前捕获的数据是否存在且新鲜
-        if (!capturedChatData || (Date.now() - capturedTimestamp > FRESHNESS_THRESHOLD_MS)) {
-            console.log("[AI Studio Exporter] 当前 XHR 数据不存在或已过期，尝试从缓存加载...");
-            
-            // 从缓存加载数据
-            const cachedData = loadCachedConversationData();
-            if (cachedData && cachedData.data && cachedData.timestamp) {
-                console.log(`[AI Studio Exporter] 成功从缓存加载数据，缓存时间: ${new Date(cachedData.timestamp).toLocaleTimeString()}`);
-                
-                // 检查缓存数据的有效性
-                const cacheAge = Date.now() - cachedData.timestamp;
-                if (isCacheValid(cachedData.timestamp, FRESHNESS_THRESHOLD_MS * 4)) { // 允许缓存数据稍微旧一点
-                    chatDataToUse = cachedData.data;
-                    dataTimestamp = cachedData.timestamp;
-                    console.log(`[AI Studio Exporter] 缓存数据有效，将用于导出`);
-                } else {
-                    console.log(`[AI Studio Exporter] 缓存数据已过期 (${cacheAge}ms)，无法使用`);
-                    return false;
-                }
-            } else {
-                console.log("[AI Studio Exporter] 缓存中没有找到有效数据");
-                console.log("[AI Studio Exporter] 提示：请确保在打开对话前脚本已经加载，或刷新页面后重试");
-                return false;
-            }
-        }
-
-        const dataAge = Date.now() - dataTimestamp;
-        console.log(`[AI Studio Exporter] XHR 数据年龄: ${dataAge}ms (阈值: ${FRESHNESS_THRESHOLD_MS}ms)`);
-
-        if (dataAge > FRESHNESS_THRESHOLD_MS * 4) { // 调整阈值以允许缓存数据
-            console.log(`[AI Studio Exporter] 警告：XHR 数据过旧（${dataAge}ms），可能已过期`);
-            return false;
-        }
-
-        console.log(`[AI Studio Exporter] XHR 数据新鲜度：${dataAge}ms`);
-
-        const history = findHistoryRecursive(chatDataToUse);
-        if (!history || !Array.isArray(history) || history.length === 0) {
-            console.log("[AI Studio Exporter] 警告：从 XHR 数据中未找到有效的聊天历史");
-            console.log("[AI Studio Exporter] capturedChatData 结构:", capturedChatData);
-            return false;
-        }
-
-        console.log(`[AI Studio Exporter] 找到 ${history.length} 个聊天回合`);
-
         let processedCount = 0;
         const newTurnOrder = [];
 
@@ -1698,10 +1630,13 @@ function isResponseTurn(turn) {
         // Update global turnOrder
         turnOrder.length = 0;
         turnOrder.push(...newTurnOrder);
+<<<<<<< HEAD
         updateUI('SCROLLING', collectedData.size);
 
         return true;
     }
+=======
+>>>>>>> c1becfe96eca095bf9bb6b3d6293e4cd1593eda9
 
     async function startProcess() {
         if (isRunning) return;
