@@ -1108,7 +1108,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             setTimeout(() => {
                 document.addEventListener('mousedown', this.closeHandler, true);
                 document.addEventListener('keydown', this.escapeHandler, true);
-            }, 100);
+            }, RAW_MODE_MENU_DELAY_MS / 2);
         },
 
         hide() {
@@ -1429,6 +1429,95 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     // ==========================================
     // 导出主流程：模式选择 → 倒计时 → 采集 → 导出
     // Main export flow: mode select → countdown → capture → export
+
+    async function processXHRData() {
+        dlog("开始处理 XHR 数据...");
+
+        const FRESHNESS_THRESHOLD_MS = 30000;
+
+        if (!capturedChatData) {
+            dlog("警告：没有捕获到 XHR 数据");
+            return false;
+        }
+
+        const dataAge = Date.now() - capturedTimestamp;
+        if (dataAge > FRESHNESS_THRESHOLD_MS) {
+            dlog(`警告：XHR 数据过旧（${dataAge}ms），可能已过期`);
+            return false;
+        }
+
+        dlog(`XHR 数据新鲜度：${dataAge}ms`);
+
+        const history = findHistoryRecursive(capturedChatData);
+        if (!history || !Array.isArray(history) || history.length === 0) {
+            dlog("警告：从 XHR 数据中未找到有效的聊天历史");
+            return false;
+        }
+
+        dlog(`找到 ${history.length} 个聊天回合`);
+
+        let processedCount = 0;
+        let turnOrder = [];
+
+        for (let i = 0; i < history.length; i++) {
+            const turn = history[i];
+
+            if (!isTurn(turn)) {
+                continue;
+            }
+
+            const isThinking = isThinkingTurn(turn);
+            const isResponse = isResponseTurn(turn);
+
+            let role = null;
+
+            if (isThinking) {
+                if (!CONFIG.INCLUDE_THINKING) {
+                    continue;
+                }
+                role = ROLE_GEMINI;
+            } else if (isResponse) {
+                if (!CONFIG.INCLUDE_MODEL) {
+                    continue;
+                }
+                role = ROLE_GEMINI;
+            } else {
+                if (!CONFIG.INCLUDE_USER) {
+                    continue;
+                }
+                role = ROLE_USER;
+            }
+
+            const text = extractTextFromTurn(turn);
+            const turnId = `xhr_turn_${i}`;
+
+            const entry = {
+                role: role,
+                text: text,
+                thoughts: null,
+                attachments: []
+            };
+
+            if (isThinking && CONFIG.INCLUDE_THINKING) {
+                entry.thoughts = text;
+                entry.text = "";
+            }
+
+            collectedData.set(turnId, entry);
+            turnOrder.push(turnId);
+            processedCount++;
+
+            dlog(`处理回合 ${i + 1}/${history.length}: ${role}, 文本长度: ${text.length}`);
+        }
+
+        dlog(`XHR 处理完成：成功处理 ${processedCount} 个回合`);
+
+        updateTurnOrder(turnOrder);
+        updateUI('SCROLLING', collectedData.size);
+
+        return true;
+    }
+
     async function startProcess() {
         if (isRunning) return;
         resetExportState();
@@ -1451,6 +1540,46 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             await sleep(1000);
         }
 
+        // ========================================
+        // 根据提取模式选择处理方式
+        // ========================================
+        if (CONFIG.EXTRACTION_MODE === 'xhr') {
+            dlog("使用 XHR 模式提取数据");
+            const success = await processXHRData();
+
+            if (!success) {
+                dlog("XHR 提取失败，回退到 DOM 模式");
+                updateUI('SCROLLING', 0);
+            } else {
+                endProcess("FINISHED");
+                return;
+            }
+        }
+
+        // DOM 模式或 XHR 失败后的回退
+        dlog("使用 DOM 模式提取数据");
+
+        // ========================================
+        // 模式检测和切换（仅 DOM 模式）
+        // ========================================
+        const currentMode = detectCurrentMode();
+        dlog(`当前显示模式: ${currentMode}`);
+
+        if (currentMode === 'rendered') {
+            dlog("尝试切换到原始模式...");
+            const toggleSuccess = await toggleRawMode();
+
+            if (toggleSuccess) {
+                dlog("成功切换到原始模式");
+            } else {
+                dlog("切换到原始模式失败，继续使用当前模式");
+            }
+        } else {
+            dlog("当前已是原始模式，跳过切换");
+        }
+
+        await sleep(RAW_MODE_RENDER_DELAY_MS);
+
         let scroller = findRealScroller();
 
         // 移动端增强激活逻辑
@@ -1458,7 +1587,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             dlog("尝试主动激活滚动容器...");
             // 先尝试滚动 window
             window.scrollBy(0, 1);
-            await sleep(100);
+            await sleep(SCROLL_DELAY_MS);
             scroller = findRealScroller();
         }
 
@@ -1468,7 +1597,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             const bubble = document.querySelector('ms-chat-turn');
             if (bubble) {
                 bubble.scrollIntoView({ behavior: 'instant' });
-                await sleep(200);
+                await sleep(RAW_MODE_MENU_DELAY_MS);
                 scroller = findRealScroller();
             }
         }
@@ -1496,7 +1625,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             firstButton.click();
 
             // 等待跳转和渲染
-            await sleep(1500);
+            await sleep(UPWARD_SCROLL_DELAY_MS + RAW_MODE_RENDER_DELAY_MS);
             dlog("跳转后 scrollTop:", scroller.scrollTop);
         } else {
             dlog("未找到滚动条按钮，使用备用方案...");
@@ -1510,29 +1639,29 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             let upwardAttempts = 0;
             const maxUpwardAttempts = 15; // 减少尝试次数
 
-            while (currentPos > 100 && upwardAttempts < maxUpwardAttempts) {
+            while (currentPos > BOTTOM_DETECTION_TOLERANCE * 10 && upwardAttempts < maxUpwardAttempts) {
                 upwardAttempts++;
 
                 // 每次向上滚动一个视口高度
                 const scrollAmount = Math.min(window.innerHeight, currentPos);
                 scroller.scrollBy({ top: -scrollAmount, behavior: 'smooth' });
 
-                await sleep(500);
+                await sleep(UPWARD_SCROLL_DELAY_MS / 2);
 
                 const newPos = scroller.scrollTop;
                 dlog(`向上滚动 ${upwardAttempts}/${maxUpwardAttempts}: ${currentPos} → ${newPos}`);
 
                 // 如果卡住了，尝试直接设置
-                if (Math.abs(newPos - currentPos) < 10) {
+                if (Math.abs(newPos - currentPos) < MIN_SCROLL_DISTANCE_THRESHOLD * 2) {
                     dlog("检测到卡住，尝试直接设置...");
                     scroller.scrollTop = Math.max(0, currentPos - scrollAmount);
-                    await sleep(300);
+                    await sleep(RAW_MODE_RENDER_DELAY_MS);
                 }
 
                 currentPos = scroller.scrollTop;
 
                 // 如果已经到顶部附近，退出
-                if (currentPos < 100) {
+                if (currentPos < BOTTOM_DETECTION_TOLERANCE * 10) {
                     break;
                 }
             }
@@ -1541,18 +1670,18 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         // 最终确保到达顶部
         dlog("执行最终回到顶部，当前 scrollTop:", scroller.scrollTop);
         scroller.scrollTop = 0;
-        await sleep(500);
+        await sleep(UPWARD_SCROLL_DELAY_MS / 2);
 
         // 再次确认
-        if (scroller.scrollTop > 10) {
+        if (scroller.scrollTop > BOTTOM_DETECTION_TOLERANCE) {
             scroller.scrollTo({ top: 0, behavior: 'instant' });
-            await sleep(500);
+            await sleep(UPWARD_SCROLL_DELAY_MS / 2);
         }
 
         dlog("✓ 回到顶部完成，最终 scrollTop:", scroller.scrollTop);
 
         // 等待 DOM 稳定
-        await sleep(800);
+        await sleep(UPWARD_SCROLL_DELAY_MS - RAW_MODE_MENU_DELAY_MS);
 
 
 
@@ -1560,19 +1689,21 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
 
         let lastScrollTop = -9999;
         let stuckCount = 0;
+        let scrollCount = 0;
 
         try {
-            while (isRunning) {
+            while (isRunning && scrollCount < MAX_SCROLL_ATTEMPTS) {
+                scrollCount++;
                 await captureData(scroller);
                 updateUI('SCROLLING', collectedData.size);
 
-                scroller.scrollBy({ top: window.innerHeight * 0.7, behavior: 'smooth' });
+                scroller.scrollBy({ top: SCROLL_INCREMENT_INITIAL, behavior: 'smooth' });
 
-                await sleep(900);
+                await sleep(RAW_MODE_RENDER_DELAY_MS * 3);
 
                 const currentScroll = scroller.scrollTop;
 
-                if (Math.abs(currentScroll - lastScrollTop) <= 2) {
+                if (Math.abs(currentScroll - lastScrollTop) <= MIN_SCROLL_DISTANCE_THRESHOLD) {
                     stuckCount++;
                     if (stuckCount >= 3) {
                         dlog("判定到底", currentScroll);
@@ -1582,6 +1713,10 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                     stuckCount = 0;
                 }
                 lastScrollTop = currentScroll;
+            }
+
+            if (scrollCount >= MAX_SCROLL_ATTEMPTS) {
+                dlog(`达到最大滚动尝试次数 (${MAX_SCROLL_ATTEMPTS})`);
             }
         } catch (e) {
             console.error(e);
@@ -1626,13 +1761,15 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         }
 
         let el = bubble.parentElement;
-        while (el && el !== document.body) {
+        let depth = 0;
+        while (el && el !== document.body && depth < SCROLL_PARENT_SEARCH_DEPTH) {
             const style = window.getComputedStyle(el);
             if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && el.scrollHeight >= el.clientHeight) {
                 return el;
             }
             el = el.parentElement;
-    }
+            depth++;
+        }
     return document.documentElement;
 }
 
@@ -1727,6 +1864,38 @@ function extractDownloadLinksFromTurn(el) {
 
             if (processedTurnIds.has(turnId) && !(role === ROLE_GEMINI && !existing.thoughts && hasThoughtChunkNow)) continue;
 
+            // Expand collapsed thinking sections
+            let thoughtExpanded = false;
+            if (role === ROLE_GEMINI) {
+                const collapsedPanels = turn.querySelectorAll('mat-expansion-panel[aria-expanded="false"]');
+                for (const panel of collapsedPanels) {
+                    const headerText = panel.querySelector('.mat-expansion-panel-header-title')?.textContent?.toLowerCase() || '';
+                    const buttonText = panel.querySelector('button[aria-expanded="false"]')?.textContent?.toLowerCase() || '';
+
+                    if (headerText.includes('thought') || headerText.includes('thinking') ||
+                        buttonText.includes('thought') || buttonText.includes('thinking')) {
+                        const expandButton = panel.querySelector('button[aria-expanded="false"]');
+                        if (expandButton) {
+                            expandButton.click();
+                            thoughtExpanded = true;
+                        }
+                    }
+                }
+
+                const thoughtChunks = turn.querySelectorAll('ms-thought-chunk');
+                for (const chunk of thoughtChunks) {
+                    const showMoreButton = chunk.querySelector('button[aria-expanded="false"], button:not([aria-expanded])');
+                    if (showMoreButton && showMoreButton.textContent?.toLowerCase().includes('more')) {
+                        showMoreButton.click();
+                        thoughtExpanded = true;
+                    }
+                }
+            }
+
+            if (thoughtExpanded) {
+                await sleep(THOUGHT_EXPAND_DELAY_MS);
+            }
+
             // Extract download links from the original turn before stripping UI-only elements
             let dlLinks = extractDownloadLinksFromTurn(turn);
             if (dlLinks.length > 0) {
@@ -1742,7 +1911,7 @@ function extractDownloadLinksFromTurn(el) {
                     const r1 = img.getBoundingClientRect();
                     img.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
                     img.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-                    await sleep(80);
+                    await sleep(SCROLL_DELAY_MS + RAW_MODE_MENU_DELAY_MS);
                     const spans = turn.querySelectorAll('span.material-symbols-outlined, span.ms-button-icon-symbol');
                     spans.forEach(sp => {
                         const txt = (sp.textContent || '').trim().toLowerCase();
@@ -2093,7 +2262,7 @@ function extractDownloadLinksFromTurn(el) {
             const cancelWatcher = new Promise(resolve => {
                 cancelIntervalId = setInterval(() => {
                     if (cancelRequested) { clearInterval(cancelIntervalId); resolve(); }
-                }, 200);
+                }, SCROLL_DELAY_MS * 4);
             });
             try {
                 await Promise.race([Promise.all(promises), cancelWatcher]);
@@ -2567,6 +2736,24 @@ function extractDownloadLinksFromTurn(el) {
         }
     }
 
+    async function performFinalCollection(scroller) {
+        dlog("执行最终数据收集...");
+
+        scroller.scrollTop = 0;
+        await sleep(FINAL_COLLECTION_DELAY_MS);
+        await captureData(scroller);
+
+        scroller.scrollTop = scroller.scrollHeight / 2;
+        await sleep(FINAL_COLLECTION_DELAY_MS);
+        await captureData(scroller);
+
+        scroller.scrollTop = scroller.scrollHeight;
+        await sleep(FINAL_COLLECTION_DELAY_MS);
+        await captureData(scroller);
+
+        dlog(`最终数据收集完成。总记录数: ${collectedData.size}`);
+    }
+
     function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
     // 全局 ESC 处理：弹出取消提示并根据选择继续或回退
@@ -2598,11 +2785,11 @@ function extractDownloadLinksFromTurn(el) {
         }
     });
 
-    setInterval(createEntryButton, 2000);
+    setInterval(createEntryButton, UPWARD_SCROLL_DELAY_MS * 2);
 
     // 导航处理：切换对话时清除缓存
     function clearCapturedData() {
-        if (Date.now() - capturedTimestamp < 2000) {
+        if (Date.now() - capturedTimestamp < UPWARD_SCROLL_DELAY_MS * 2) {
             return;
         }
         capturedChatData = null;
