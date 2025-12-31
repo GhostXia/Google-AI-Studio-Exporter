@@ -1640,7 +1640,7 @@ function isResponseTurn(turn) {
         console.log(`[AI Studio Exporter] 找到 ${history.length} 个聊天回合`);
 
         let processedCount = 0;
-        let turnOrder = [];
+        const newTurnOrder = [];
 
         for (let i = 0; i < history.length; i++) {
             const turn = history[i];
@@ -1687,7 +1687,7 @@ function isResponseTurn(turn) {
             }
 
             collectedData.set(turnId, entry);
-            turnOrder.push(turnId);
+            newTurnOrder.push(turnId);
             processedCount++;
 
             console.log(`[AI Studio Exporter] 处理回合 ${i + 1}/${history.length}: ${role}, 文本长度: ${text.length}`);
@@ -1695,7 +1695,9 @@ function isResponseTurn(turn) {
 
         console.log(`[AI Studio Exporter] XHR 处理完成：成功处理 ${processedCount} 个回合`);
 
-        updateTurnOrder(turnOrder);
+        // Update global turnOrder
+        turnOrder.length = 0;
+        turnOrder.push(...newTurnOrder);
         updateUI('SCROLLING', collectedData.size);
 
         return true;
