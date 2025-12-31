@@ -845,7 +845,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                 pointerEvents: 'none'
             });
 
-            this.shadowRoot = this.shadowHost.attachShadow({ mode: 'closed' });
+            this.shadowRoot = this.shadowHost.attachShadow({ mode: 'open' });
 
             const style = document.createElement('style');
             style.textContent = `
