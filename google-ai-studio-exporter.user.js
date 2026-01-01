@@ -967,15 +967,115 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         return candidates.sort((a, b) => b.length - a.length)[0] || "";
     }
 
-const THINKING_TURN_INDICATOR_INDEX = 19;
-const RESPONSE_TURN_INDICATOR_INDEX = 16;
+// 【动态索引检测 - 改进的回合类型识别机制】
+// 为了减少对硬编码索引的依赖，我们实现了动态索引检测机制
+// 该机制会分析回合数组的结构，寻找具有特定模式的位置来识别回合类型
+// 如果动态检测失败，会回退到硬编码索引作为备用方案
 
-function isThinkingTurn(turn) {
-    return Array.isArray(turn) && turn.length > THINKING_TURN_INDICATOR_INDEX && turn[THINKING_TURN_INDICATOR_INDEX] === 1; // 索引 19: 思考回合指示器
+// 默认硬编码索引（作为后备方案）
+const DEFAULT_THINKING_TURN_INDEX = 19;
+const DEFAULT_RESPONSE_TURN_INDEX = 16;
+
+// 动态检测到的索引（初始值为默认值）
+let detectedThinkingTurnIndex = DEFAULT_THINKING_TURN_INDEX;
+let detectedResponseTurnIndex = DEFAULT_RESPONSE_TURN_INDEX;
+
+/**
+ * 动态检测回合类型指示器的索引位置
+ * @param {Array} sampleTurns - 样本回合数组，用于分析结构
+ */
+function detectTurnIndicatorIndices(sampleTurns) {
+    if (!Array.isArray(sampleTurns) || sampleTurns.length === 0) {
+        dlog("[AI Studio Exporter] 动态索引检测：没有可用的样本回合数据");
+        return;
+    }
+
+    // 寻找可能的思考回合和回复回合指示器位置
+    // 基于观察：这些指示器通常是值为1的数字，位于数组的后半部分
+    const candidatePositions = new Map();
+    
+    sampleTurns.forEach(turn => {
+        if (!Array.isArray(turn)) return;
+        
+        // 只检查数组后半部分（基于原始观察）
+        const后半部分 = turn.slice(Math.floor(turn.length / 2));
+        
+        后半部分.forEach((value, index) => {
+            if (value === 1) {
+                const actualIndex = Math.floor(turn.length / 2) + index;
+                candidatePositions.set(actualIndex, (candidatePositions.get(actualIndex) || 0) + 1);
+            }
+        });
+    });
+    
+    // 找出出现频率最高的两个位置
+    const sortedPositions = Array.from(candidatePositions.entries())
+        .sort(([,a], [,b]) => b - a)
+        .map(([position]) => position);
+    
+    if (sortedPositions.length >= 2) {
+        // 假设较小的索引是回复回合，较大的是思考回合（基于原始观察）
+        const [pos1, pos2] = sortedPositions;
+        detectedResponseTurnIndex = Math.min(pos1, pos2);
+        detectedThinkingTurnIndex = Math.max(pos1, pos2);
+        
+        dlog(`[AI Studio Exporter] 动态索引检测：找到回复回合索引 ${detectedResponseTurnIndex}，思考回合索引 ${detectedThinkingTurnIndex}`);
+    } else {
+        dlog("[AI Studio Exporter] 动态索引检测：无法确定可靠的索引位置，使用默认值");
+        // 保持默认值
+    }
 }
 
+/**
+ * 检测思考回合
+ * @param {Array} turn - 回合数据数组
+ * @returns {boolean} - 是否为思考回合
+ */
+function isThinkingTurn(turn) {
+    if (!Array.isArray(turn)) return false;
+    
+    // 首先尝试动态检测到的索引
+    if (turn.length > detectedThinkingTurnIndex && turn[detectedThinkingTurnIndex] === 1) {
+        return true;
+    }
+    
+    // 如果动态索引失败，尝试默认索引
+    if (turn.length > DEFAULT_THINKING_TURN_INDEX && turn[DEFAULT_THINKING_TURN_INDEX] === 1) {
+        return true;
+    }
+    
+    // 最后尝试基于内容的启发式检测
+    // 思考回合通常包含"思考中"或类似的文本提示
+    const text = extractTextFromTurn(turn).toLowerCase();
+    return text.includes("thinking") || text.includes("思考中") || text.includes("正在思考");
+}
+
+/**
+ * 检测回复回合
+ * @param {Array} turn - 回合数据数组
+ * @returns {boolean} - 是否为回复回合
+ */
 function isResponseTurn(turn) {
-    return Array.isArray(turn) && turn.length > RESPONSE_TURN_INDICATOR_INDEX && turn[RESPONSE_TURN_INDICATOR_INDEX] === 1; // 索引 16: 回复回合指示器
+    if (!Array.isArray(turn)) return false;
+    
+    // 首先尝试动态检测到的索引
+    if (turn.length > detectedResponseTurnIndex && turn[detectedResponseTurnIndex] === 1) {
+        return true;
+    }
+    
+    // 如果动态索引失败，尝试默认索引
+    if (turn.length > DEFAULT_RESPONSE_TURN_INDEX && turn[DEFAULT_RESPONSE_TURN_INDEX] === 1) {
+        return true;
+    }
+    
+    // 最后尝试基于内容和结构的启发式检测
+    // 回复回合通常是模型的回答，包含较长的文本，且不是用户回合或思考回合
+    if (isThinkingTurn(turn)) return false;
+    
+    const text = extractTextFromTurn(turn);
+    const isUserTurn = Array.isArray(turn) && turn.includes('user');
+    
+    return !isUserTurn && text.length > 10; // 非用户回合且文本较长，可能是回复
 }
 
     // ==========================================
@@ -1672,6 +1772,9 @@ function isResponseTurn(turn) {
             }
             
             dlog(`[AI Studio Exporter] 找到 ${history.length} 个聊天回合`);
+            
+            // 动态检测回合类型指示器的索引位置
+            detectTurnIndicatorIndices(history);
 
             let processedCount = 0;
             const newTurnOrder = [];
