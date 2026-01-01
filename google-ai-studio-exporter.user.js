@@ -818,36 +818,11 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     // ==========================================
     // 4. XHR 拦截器 (新增 - 核心功能)
     // ==========================================
-    console.log("[AI Studio Exporter] 正在设置 XHR 拦截器...");
-    
-    const originalOpen = XMLHttpRequest.prototype.open;
-    const originalSend = XMLHttpRequest.prototype.send;
-
-    XMLHttpRequest.prototype.open = function(method, url) {
-        this._url = url;
-        return originalOpen.apply(this, arguments);
-    };
-
-    XMLHttpRequest.prototype.send = function(body) {
-        this.addEventListener('load', function() {
-            if (this._url && (
-                this._url.includes('ResolveDriveResource') ||
-                this._url.includes('CreatePrompt') ||
-                this._url.includes('UpdatePrompt')
-            )) {
-                try {
-                    const rawText = this.responseText.replace(/^\)\]\}'/, '').trim();
-                    let json = JSON.parse(rawText);
-
-                    if (Array.isArray(json) && json.length > 0) {
-                        let endpoint = 'ResolveDriveResource';
-                        if (this._url.includes('CreatePrompt')) endpoint = 'CreatePrompt';
-                        else if (this._url.includes('UpdatePrompt')) endpoint = 'UpdatePrompt';
-
-                        if (typeof json[0] === 'string' && json[0].startsWith('prompts/')) {
-                            json = [json];
-                        }
-
+                    // 仅当此响应更完整（数据量更大）时才更新
+                    const shouldUpdate = !capturedChatData || 
+                        (JSON.stringify(json).length > JSON.stringify(capturedChatData).length);
+                    
+                    if (shouldUpdate) {
                         console.log(`[AI Studio Exporter] ${endpoint} intercepted. Size: ${rawText.length} chars.`);
                         console.log(`[AI Studio Exporter] Captured data structure:`, json);
                         capturedChatData = json;
@@ -855,16 +830,9 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                         console.log(`[AI Studio Exporter] Data captured at: ${new Date(capturedTimestamp).toLocaleTimeString()}`);
                         // 保存到缓存
                         saveConversationDataToCache(json);
+                    } else {
+                        console.log(`[AI Studio Exporter] Skipped smaller response from ${endpoint}`);
                     }
-                } catch (err) {
-                    console.log(`[AI Studio Exporter] XHR interceptor error: ${err.message}`);
-                }
-            }
-        });
-        return originalSend.apply(this, arguments);
-    };
-
-    console.log("[AI Studio Exporter] XHR 拦截器设置完成");
 
     // XHR 解析逻辑 (新增)
     function isTurn(arr) {
