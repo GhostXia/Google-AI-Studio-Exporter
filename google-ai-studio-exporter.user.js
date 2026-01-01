@@ -859,9 +859,9 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                         return;
                     }
 
-                    // 安全处理：严格验证数据结构
-                    if (!Array.isArray(json) || json.length === 0) {
-                        dlog(`[AI Studio Exporter] XHR interceptor: Invalid data structure, expected non-empty array`);
+                    // 安全处理：验证数据结构
+                    if (!Array.isArray(json)) {
+                        dlog(`[AI Studio Exporter] XHR interceptor: Invalid data structure, expected array`);
                         return;
                     }
                     
@@ -873,26 +873,43 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                         json = [json];
                     }
 
-                    // 仅当此响应更完整（数据量更大）时才更新
-                    const shouldUpdate = !capturedChatData || 
-                        (JSON.stringify(json).length > JSON.stringify(capturedChatData).length);
+                    // 优先级策略： 
+                    // 1. CreatePrompt/UpdatePrompt 优先于 ResolveDriveResource 
+                    // 2. 相同端点下，选择数据更大的响应 
+                    const currentPriority = endpoint === 'ResolveDriveResource' ? 1 : 2;
+                    const existingPriority = capturedChatData ? 
+                        (capturedChatData._endpoint === 'ResolveDriveResource' ? 1 : 2) : 0;
                     
+                    const currentSize = JSON.stringify(json).length;
+                    const existingSize = capturedChatData ? 
+                        JSON.stringify(capturedChatData).length : 0;
+
+                    const shouldUpdate = !capturedChatData || 
+                        currentPriority > existingPriority || 
+                        (currentPriority === existingPriority && currentSize > existingSize);
+
                     if (shouldUpdate) {
-                        dlog(`[AI Studio Exporter] ${endpoint} intercepted. Size: ${rawText.length} chars.`);
-                        dlog(`[AI Studio Exporter] Captured data structure:`, json);
+                        console.log(`[AI Studio Exporter] ${endpoint} intercepted. Size: ${rawText.length} chars.`);
+                        console.log(`[AI Studio Exporter] Captured data structure:`, json);
+                        
+                        // 标记数据来源，用于后续比较 
+                        json._endpoint = endpoint;
+                        json._captureTime = Date.now();
+                        
                         capturedChatData = json;
-                        capturedTimestamp = Date.now();
-                        dlog(`[AI Studio Exporter] Data captured at: ${new Date(capturedTimestamp).toLocaleTimeString()}`);
+                        capturedTimestamp = json._captureTime;
+                        
+                        console.log(`[AI Studio Exporter] Data captured at: ${new Date(capturedTimestamp).toLocaleTimeString()}`);
                         
                         // 保存到缓存，添加错误处理
                         try {
                             saveConversationDataToCache(json);
-                            dlog(`[AI Studio Exporter] Data saved to cache`);
+                            console.log(`[AI Studio Exporter] Data saved to cache`);
                         } catch (cacheErr) {
-                            dlog(`[AI Studio Exporter] Failed to save data to cache: ${cacheErr.message}`);
+                            console.log(`[AI Studio Exporter] Failed to save data to cache: ${cacheErr.message}`);
                         }
                     } else {
-                        dlog(`[AI Studio Exporter] Skipped smaller response from ${endpoint}`);
+                        console.log(`[AI Studio Exporter] 跳过较小或低优先级的 ${endpoint} 响应 (${currentSize} vs ${existingSize} bytes)`);
                     }
                 } catch (err) {
                     dlog(`[AI Studio Exporter] XHR interceptor error: ${err.message}`);
