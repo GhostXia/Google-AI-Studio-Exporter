@@ -998,9 +998,9 @@ function detectTurnIndicatorIndices(sampleTurns) {
         if (!Array.isArray(turn)) return;
         
         // 只检查数组后半部分（基于原始观察）
-        const后半部分 = turn.slice(Math.floor(turn.length / 2));
+        const latterHalf = turn.slice(Math.floor(turn.length / 2));
         
-        后半部分.forEach((value, index) => {
+        latterHalf.forEach((value, index) => {
             if (value === 1) {
                 const actualIndex = Math.floor(turn.length / 2) + index;
                 candidatePositions.set(actualIndex, (candidatePositions.get(actualIndex) || 0) + 1);
