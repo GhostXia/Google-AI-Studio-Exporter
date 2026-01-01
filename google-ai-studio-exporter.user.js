@@ -2211,6 +2211,32 @@ function isResponseTurn(turn) {
         btnContainer.querySelectorAll('.ai-mode-btn').forEach(btn => btn.remove());
     }
 
+    /**
+     * 统一的提示框显示函数
+     * @param {string} title - 提示框标题
+     * @param {string} status - 提示框状态文本
+     * @param {Array} buttons - 按钮配置数组，每个元素包含 {id, text, isPrimary, value}
+     * @returns {Promise} - 用户选择的结果
+     */
+    function showPrompt(title, status, buttons) {
+        return new Promise((resolve, reject) => {
+            initUI();
+            titleEl.innerText = title;
+            statusEl.innerHTML = status;
+            countEl.innerText = '';
+            
+            const btnContainer = overlay.querySelector('.ai-btn-container');
+            prepareButtonContainer(btnContainer);
+            
+            buttons.forEach(({ id, text, isPrimary, value, onClick }) => {
+                createModeButton(id, text, isPrimary, () => {
+                    if (onClick) onClick();
+                    resolve(value);
+                }, btnContainer);
+            });
+        });
+    }
+
     function createEntryButton() {
         if (document.getElementById('ai-entry-btn-v14')) return;
         const btn = document.createElement('button');
@@ -2351,15 +2377,15 @@ function isResponseTurn(turn) {
     // 显示导出模式选择（附件/纯文本）
     // Show export mode selection (attachments/text-only)
     function showModeSelection() {
+        initUI();
+        titleEl.innerText = t('title_mode_select');
+        statusEl.innerHTML = t('status_mode_select');
+        countEl.innerText = '';
+
+        const btnContainer = overlay.querySelector('.ai-btn-container');
+        prepareButtonContainer(btnContainer);
+
         return new Promise((resolve, reject) => {
-            initUI();
-            titleEl.innerText = t('title_mode_select');
-            statusEl.innerHTML = t('status_mode_select');
-            countEl.innerText = '';
-
-            const btnContainer = overlay.querySelector('.ai-btn-container');
-            prepareButtonContainer(btnContainer);
-
             const fullBtn = createModeButton('ai-mode-full', t('btn_mode_full'), true, () => {
                 exportMode = 'full';
                 resolve('full');
@@ -2407,45 +2433,53 @@ function isResponseTurn(turn) {
     // 当 ZIP 库不可用时的回退提示（纯文本/重试/取消）
     // Fallback prompt when ZIP library is unavailable (text/retry/cancel)
     function showZipFallbackPrompt() {
-        return new Promise((resolve) => {
-            initUI();
-            titleEl.innerText = t('title_zip_missing');
-            statusEl.innerHTML = t('status_zip_missing');
-            countEl.innerText = '';
-            const btnContainer = overlay.querySelector('.ai-btn-container');
-            prepareButtonContainer(btnContainer);
-
-            createModeButton('ai-fallback-text', t('btn_mode_text'), true, () => {
-                exportMode = 'text';
-                resolve('text');
-            }, btnContainer);
-
-            createModeButton('ai-retry-zip', t('btn_retry'), false, () => {
-                resolve('retry');
-            }, btnContainer);
-
-            createModeButton('ai-cancel', t('btn_cancel'), false, () => {
-                overlay.style.display = 'none';
-                resolve('cancel');
-            }, btnContainer);
-        });
+        return showPrompt(t('title_zip_missing'), t('status_zip_missing'), [
+            {
+                id: 'ai-fallback-text',
+                text: t('btn_mode_text'),
+                isPrimary: true,
+                value: 'text',
+                onClick: () => exportMode = 'text'
+            },
+            {
+                id: 'ai-retry-zip',
+                text: t('btn_retry'),
+                isPrimary: false,
+                value: 'retry'
+            },
+            {
+                id: 'ai-cancel',
+                text: t('btn_cancel'),
+                isPrimary: false,
+                value: 'cancel',
+                onClick: () => overlay.style.display = 'none'
+            }
+        ]);
     }
 
     // 用户按下 ESC 的取消提示（选择继续打包或改为纯文本）
     // Cancel prompt when user presses ESC (continue attachments or text-only)
     function showCancelPrompt() {
-        return new Promise((resolve) => {
-            initUI();
-            titleEl.innerText = t('title_cancel');
-            statusEl.innerHTML = t('status_cancel');
-            countEl.innerText = '';
-            const btnContainer = overlay.querySelector('.ai-btn-container');
-            prepareButtonContainer(btnContainer);
-
-            createModeButton('ai-cancel-text', t('btn_mode_text'), true, () => resolve('text'), btnContainer);
-            createModeButton('ai-cancel-retry', t('btn_retry'), false, () => resolve('retry'), btnContainer);
-            createModeButton('ai-cancel-close', t('btn_cancel'), false, () => resolve('cancel'), btnContainer);
-        });
+        return showPrompt(t('title_cancel'), t('status_cancel'), [
+            {
+                id: 'ai-cancel-text',
+                text: t('btn_mode_text'),
+                isPrimary: true,
+                value: 'text'
+            },
+            {
+                id: 'ai-cancel-retry',
+                text: t('btn_retry'),
+                isPrimary: false,
+                value: 'retry'
+            },
+            {
+                id: 'ai-cancel-close',
+                text: t('btn_cancel'),
+                isPrimary: false,
+                value: 'cancel'
+            }
+        ]);
     }
 
     // ==========================================
@@ -3218,39 +3252,69 @@ function extractDownloadLinksFromTurn(el) {
     // Normalize: merge consecutive Gemini-thoughts-only into next Gemini text within the same segment
     function normalizeConversation() {
         if (turnOrder.length === 0 || collectedData.size === 0) return;
-        const newOrder = [];
-        const newMap = new Map();
-
-        for (let i = 0; i < turnOrder.length; i++) {
-            const id = turnOrder[i];
+        
+        // 第一步：识别合并关系
+        const mergeMap = new Map(); // key: 要合并的thoughts条目ID, value: 目标text条目ID
+        const skipIds = new Set(); // 要跳过的条目ID
+        
+        // 创建数据的深拷贝，避免修改原始数据
+        const dataCopy = new Map();
+        turnOrder.forEach(id => {
             const item = collectedData.get(id);
-            if (!item) continue;
-
+            if (item) {
+                dataCopy.set(id, JSON.parse(JSON.stringify(item)));
+            }
+        });
+        
+        // 识别需要合并的条目
+        turnOrder.forEach((id, i) => {
+            const item = dataCopy.get(id);
+            if (!item) return;
+            
+            // 寻找需要合并的thoughts条目
             if (item.role === ROLE_GEMINI && item.thoughts && !item.text) {
-                let merged = false;
-                for (let j = i + 1; j < turnOrder.length; j++) {
-                    const nextId = turnOrder[j];
-                    const nextItem = collectedData.get(nextId);
-                    if (!nextItem) continue;
-                    if (nextItem.role === ROLE_USER) break;
-                    if (nextItem.role === ROLE_GEMINI && nextItem.text) {
-                        nextItem.thoughts = nextItem.thoughts
-                            ? (item.thoughts + '\n\n' + nextItem.thoughts)
-                            : item.thoughts;
-                        collectedData.set(nextId, nextItem);
-                        merged = true;
-                        break;
-                    }
-                }
-                if (merged) {
-                    continue; // skip adding this thoughts-only entry
+                // 向后查找下一个有text的Gemini条目
+                const nextGeminiTextId = turnOrder.slice(i + 1)
+                    .find(nextId => {
+                        const nextItem = dataCopy.get(nextId);
+                        return nextItem && nextItem.role === ROLE_GEMINI && nextItem.text;
+                    });
+                
+                if (nextGeminiTextId) {
+                    mergeMap.set(id, nextGeminiTextId);
+                    skipIds.add(id);
                 }
             }
-
+        });
+        
+        // 第二步：执行合并并生成新的结构
+        const newOrder = [];
+        const newMap = new Map();
+        
+        turnOrder.forEach(id => {
+            if (skipIds.has(id)) return; // 跳过已标记为合并的条目
+            
+            const item = dataCopy.get(id);
+            if (!item) return;
+            
+            // 检查是否有需要合并到此条目的thoughts
+            const mergedThoughtsIds = Array.from(mergeMap.entries())
+                .filter(([_, targetId]) => targetId === id)
+                .map(([sourceId]) => sourceId);
+            
+            // 合并所有相关的thoughts
+            if (mergedThoughtsIds.length > 0) {
+                const allThoughts = [item.thoughts, ...mergedThoughtsIds.map(thoughtId => dataCopy.get(thoughtId).thoughts)]
+                    .filter(Boolean) // 过滤掉空值
+                    .join('\n\n');
+                
+                item.thoughts = allThoughts;
+            }
+            
             newOrder.push(id);
             newMap.set(id, item);
-        }
-
+        });
+        
         turnOrder = newOrder;
         collectedData = newMap;
     }
@@ -3308,35 +3372,46 @@ function extractDownloadLinksFromTurn(el) {
             updateUI('PACKAGING', t(config.statusStart, { n: uniqueUrls.size }));
             let completedCount = 0;
 
+            const abortController = new AbortController();
+            const { signal } = abortController;
+            let cancelIntervalId = null;
+
+            // Check for cancellation requests
+            cancelIntervalId = setInterval(() => {
+                if (cancelRequested && !signal.aborted) {
+                    abortController.abort();
+                }
+            }, SCROLL_DELAY_MS * 4);
+
             const promises = Array.from(uniqueUrls).map(async (url, index) => {
-                if (cancelRequested) return;
+                if (signal.aborted) return;
                 try {
-                    const blob = await fetchResource(url);
-                    if (blob) {
+                    const blob = await fetchResource(url, signal);
+                    if (blob && !signal.aborted) {
                         const filename = config.filenameGenerator(url, index, blob);
                         zipFolder.file(filename, blob);
                         resourceMap.set(url, `${config.subDir}/${filename}`);
                     }
                 } catch (e) {
-                    console.error(`${config.subDir} download failed:`, url, e);
-                    debugLog(`${config.subDir} download failed: ${url} (${e && e.message ? e.message : 'error'})`, 'error');
+                    if (e.name !== 'AbortError') {
+                        console.error(`${config.subDir} download failed:`, url, e);
+                        debugLog(`${config.subDir} download failed: ${url} (${e && e.message ? e.message : 'error'})`, 'error');
+                    }
                 }
                 completedCount++;
-                if (completedCount % 5 === 0 || completedCount === uniqueUrls.size) {
+                if (!signal.aborted && (completedCount % 5 === 0 || completedCount === uniqueUrls.size)) {
                     updateUI('PACKAGING', t(config.statusProgress, { c: completedCount, t: uniqueUrls.size }));
                 }
             });
 
-            let cancelIntervalId = null;
-            const cancelWatcher = new Promise(resolve => {
-                cancelIntervalId = setInterval(() => {
-                    if (cancelRequested) { clearInterval(cancelIntervalId); resolve(); }
-                }, SCROLL_DELAY_MS * 4);
-            });
             try {
-                await Promise.race([Promise.all(promises), cancelWatcher]);
+                await Promise.all(promises);
+            } catch (e) {
+                if (e.name !== 'AbortError') {
+                    throw e;
+                }
             } finally {
-                if (cancelIntervalId) clearInterval(cancelIntervalId);
+                clearInterval(cancelIntervalId);
             }
         }
         return resourceMap;
@@ -3727,12 +3802,22 @@ function extractDownloadLinksFromTurn(el) {
 
     // 资源下载：支持 GM_xmlhttpRequest 与 fetch，并内置超时
     // Resource fetcher: supports GM_xmlhttpRequest and fetch, with timeout
-    function fetchResource(url) {
+    function fetchResource(url, signal) {
         const timeoutMs = 10000;
         return new Promise((resolve) => {
             let settled = false;
             const timeout = setTimeout(() => { if (!settled) { settled = true; debugLog(`Resource fetch timed out: ${url}`, 'error'); resolve(null); } }, timeoutMs);
             const finish = (val) => { if (!settled) { settled = true; clearTimeout(timeout); resolve(val); } };
+
+            // 检查信号是否已中止
+            if (signal?.aborted) {
+                finish(null);
+                return;
+            }
+
+            // 设置信号中止处理
+            const abortHandler = () => finish(null);
+            signal?.addEventListener('abort', abortHandler);
 
             if (typeof GM_xmlhttpRequest !== 'undefined') {
                 GM_xmlhttpRequest({
@@ -3740,6 +3825,7 @@ function extractDownloadLinksFromTurn(el) {
                     url: url,
                     responseType: "blob",
                     onload: (response) => {
+                        signal?.removeEventListener('abort', abortHandler);
                         if (response.status >= 200 && response.status < 300) {
                             finish(response.response);
                         } else {
@@ -3748,17 +3834,35 @@ function extractDownloadLinksFromTurn(el) {
                             finish(null);
                         }
                     },
-                    onerror: () => { debugLog(`Resource fetch network error: ${url}`, 'error'); finish(null); }
+                    onerror: () => {
+                        signal?.removeEventListener('abort', abortHandler);
+                        debugLog(`Resource fetch network error: ${url}`, 'error');
+                        finish(null);
+                    },
+                    onabort: () => {
+                        signal?.removeEventListener('abort', abortHandler);
+                        finish(null);
+                    }
                 });
             } else {
-                fetch(url, { credentials: 'include' })
+                fetch(url, { credentials: 'include', signal })
                     .then(r => {
+                        signal?.removeEventListener('abort', abortHandler);
                         if (r.ok) return r.blob();
                         debugLog(`Fetch failed (${r.status}): ${url}`, 'error');
                         return null;
                     })
                     .then(finish)
-                    .catch(() => { debugLog(`Fetch error: ${url}`, 'error'); finish(null); });
+                    .catch((e) => {
+                        signal?.removeEventListener('abort', abortHandler);
+                        if (e.name === 'AbortError') {
+                            // 忽略中止错误，直接返回 null
+                            finish(null);
+                        } else {
+                            debugLog(`Fetch error: ${url}`, 'error');
+                            finish(null);
+                        }
+                    });
             }
         });
     }
