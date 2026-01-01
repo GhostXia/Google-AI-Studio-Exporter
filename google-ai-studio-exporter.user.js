@@ -909,12 +909,15 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         return candidates.sort((a, b) => b.length - a.length)[0] || "";
     }
 
+const THINKING_TURN_INDICATOR_INDEX = 19;
+const RESPONSE_TURN_INDICATOR_INDEX = 16;
+
 function isThinkingTurn(turn) {
-    return Array.isArray(turn) && turn.length > 19 && turn[19] === 1; // 索引 19: 思考回合指示器
+    return Array.isArray(turn) && turn.length > THINKING_TURN_INDICATOR_INDEX && turn[THINKING_TURN_INDICATOR_INDEX] === 1; // 索引 19: 思考回合指示器
 }
 
 function isResponseTurn(turn) {
-    return Array.isArray(turn) && turn.length > 16 && turn[16] === 1; // 索引 16: 回复回合指示器
+    return Array.isArray(turn) && turn.length > RESPONSE_TURN_INDICATOR_INDEX && turn[RESPONSE_TURN_INDICATOR_INDEX] === 1; // 索引 16: 回复回合指示器
 }
 
     // ==========================================
