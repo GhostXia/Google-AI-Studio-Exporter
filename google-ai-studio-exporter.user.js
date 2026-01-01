@@ -37,8 +37,59 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     (function () {
         'use strict';
 
-        const DEBUG = false;
-        const dlog = (...args) => { if (DEBUG) console.log(...args); };
+    // ==========================================
+    // 2. 配置常量 (集中管理)
+    // ==========================================
+    const CONFIG_CONSTANTS = {
+        // 脚本行为配置
+        DEBUG: false,
+        DISABLE_SCRIPT_INJECTION: true,
+        ATTACHMENT_COMBINED_FALLBACK: true,
+        ATTACHMENT_MAX_DIST: 160,
+
+        // JSZip CDN URLs
+        JSZIP_URLS: [
+            'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.js',
+            'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js',
+            'https://unpkg.com/jszip@3.10.1/dist/jszip.min.js'
+        ],
+
+        // DOM 提取延迟常量
+        SCROLL_DELAY_MS: 50,
+        RAW_MODE_MENU_DELAY_MS: 200,
+        RAW_MODE_RENDER_DELAY_MS: 300,
+        THOUGHT_EXPAND_DELAY_MS: 500,
+        MAX_SCROLL_ATTEMPTS: 10000,
+        BOTTOM_DETECTION_TOLERANCE: 10,
+        MIN_SCROLL_DISTANCE_THRESHOLD: 5,
+        SCROLL_PARENT_SEARCH_DEPTH: 5,
+        FINAL_COLLECTION_DELAY_MS: 300,
+        UPWARD_SCROLL_DELAY_MS: 1000,
+        SCROLL_INCREMENT_INITIAL: 150,
+
+        // 缓存配置
+        CACHE_MAX_SIZE: 5 * 1024 * 1024, // 5MB
+        CACHE_MAX_AGE: 3600000, // 1小时
+        CACHE_CLEANUP_INTERVAL: 86400000, // 24小时
+
+        // 错误处理配置
+        MAX_ERRORS: 10,
+
+        // DOM缓存配置
+        DOM_CACHE_MAX_SIZE: 1000,
+
+        // 安全配置
+        MAX_STRING_LENGTH: 10000,
+        MAX_URL_LENGTH: 2048,
+        MAX_ID_LENGTH: 1000
+    };
+
+    const dlog = (...args) => {
+        if (CONFIG_CONSTANTS.DEBUG) {
+            console.log('[AI Studio Exporter]', ...args);
+        }
+    };
         dlog('[AI Studio Exporter] Script started');
         dlog('[AI Studio Exporter] _JSZipRef:', _JSZipRef);
         dlog('[AI Studio Exporter] typeof JSZip:', typeof JSZip);
@@ -592,24 +643,13 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     let cachedExportBlob = null;
     let cancelRequested = false;
     let isHandlingEscape = false;
+    let scannedAttachmentTurns = new Set();
 
-    const DISABLE_SCRIPT_INJECTION = true;
-    const ATTACHMENT_COMBINED_FALLBACK = true;
-    const ATTACHMENT_MAX_DIST = 160;
-    const scannedAttachmentTurns = new Set();
-    const JSZIP_URLS = [
-        'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
-        'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.js',
-        'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js',
-        'https://unpkg.com/jszip@3.10.1/dist/jszip.min.js'
-    ];
-
-    // XHR 状态 (新增)
+    // XHR 状态
     let capturedChatData = null;
     let capturedTimestamp = 0;
     let currentConversationId = null;
 
-    // 配置 (新增)
     const DEFAULT_CONFIG = {
         EXTRACTION_MODE: 'xhr',  // 'xhr' or 'dom'
         INCLUDE_USER: true,
@@ -620,21 +660,8 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
 
     let CONFIG = { ...DEFAULT_CONFIG };
 
-    // DOM 提取常量 (新增)
-    const SCROLL_DELAY_MS = 50;
-    const RAW_MODE_MENU_DELAY_MS = 200;
-    const RAW_MODE_RENDER_DELAY_MS = 300;
-    const THOUGHT_EXPAND_DELAY_MS = 500;
-    const MAX_SCROLL_ATTEMPTS = 10000;
-    const BOTTOM_DETECTION_TOLERANCE = 10;
-    const MIN_SCROLL_DISTANCE_THRESHOLD = 5;
-    const SCROLL_PARENT_SEARCH_DEPTH = 5;
-    const FINAL_COLLECTION_DELAY_MS = 300;
-    const UPWARD_SCROLL_DELAY_MS = 1000;
-    const SCROLL_INCREMENT_INITIAL = 150;
-
     // ==========================================
-    // 3. 设置存储 (新增)
+    // 3. 设置存储
     // ==========================================
     function loadSettings() {
         try {
@@ -660,80 +687,321 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     loadSettings();
 
     // ==========================================
-    // 5. 缓存管理 (新增)
+    // 4. 安全工具函数
+    // ==========================================
+    const SecurityUtils = {
+        isValidString(str, maxLength = 10000) {
+            if (typeof str !== 'string') return false;
+            if (str.length > maxLength) return false;
+            // 检查是否包含潜在危险的字符序列
+            const dangerousPatterns = [
+                /<script[^>]*>/i,
+                /javascript:/i,
+                /on\w+\s*=/i
+            ];
+            return !dangerousPatterns.some(pattern => pattern.test(str));
+        },
+
+        /**
+         * 验证URL是否安全
+         * @param {string} url - 待验证的URL
+         * @returns {boolean} - 是否安全
+         */
+        isValidUrl(url) {
+            if (!this.isValidString(url, 2048)) return false;
+            try {
+                const parsed = new URL(url);
+                // 只允许特定的协议
+                const allowedProtocols = ['http:', 'https:', 'blob:', 'data:'];
+                if (!allowedProtocols.includes(parsed.protocol)) return false;
+                // 防止SSRF攻击
+                const hostname = parsed.hostname.toLowerCase();
+                const blockedHosts = ['localhost', '127.0.0.1', '0.0.0.0', '::1'];
+                if (blockedHosts.includes(hostname)) return false;
+                return true;
+            } catch (e) {
+                return false;
+            }
+        },
+
+        /**
+         * 简单的数据混淆（非加密，仅用于防止明文存储）
+         * @param {string} data - 待混淆的数据
+         * @returns {string} - 混淆后的数据
+         */
+        obfuscate(data) {
+            try {
+                const str = typeof data === 'string' ? data : JSON.stringify(data);
+                return btoa(encodeURIComponent(str));
+            } catch (e) {
+                console.warn('Data obfuscation failed:', e);
+                return data;
+            }
+        },
+
+        /**
+         * 反混淆数据
+         * @param {string} data - 混淆的数据
+         * @returns {string} - 原始数据
+         */
+        deobfuscate(data) {
+            try {
+                return decodeURIComponent(atob(data));
+            } catch (e) {
+                console.warn('Data deobfuscation failed:', e);
+                return data;
+            }
+        },
+
+        /**
+         * 生成安全的哈希值
+         * @param {string} str - 待哈希的字符串
+         * @returns {string} - 哈希值
+         */
+        hashString(str) {
+            let hash = 0;
+            if (!str) return '0';
+            for (let i = 0; i < str.length; i++) {
+                const char = str.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash;
+            }
+            return Math.abs(hash).toString(36);
+        }
+    };
+
+    // ==========================================
+    // 5. 错误处理工具
+    // ==========================================
+    const ErrorHandler = {
+        errorCount: 0,
+        maxErrors: 10,
+        errorTypes: new Map(),
+
+        handleError(error, context = 'Unknown', fatal = false) {
+            this.errorCount++;
+            const errorType = error.name || 'Error';
+            this.errorTypes.set(errorType, (this.errorTypes.get(errorType) || 0) + 1);
+
+            const errorMsg = error.message || String(error);
+            console.error(`[AI Studio Exporter] Error in ${context}:`, error);
+
+            // 记录到UI
+            if (fatal || this.errorCount > this.maxErrors) {
+                debugLog(`Fatal error: ${errorMsg}`, 'error');
+                endProcess("ERROR", t('err_runtime') + errorMsg);
+            } else {
+                dlog(`Non-fatal error in ${context}: ${errorMsg}`);
+            }
+
+            // 如果错误过多，停止执行
+            if (this.errorCount > this.maxErrors) {
+                console.error('[AI Studio Exporter] Too many errors, stopping execution');
+                endProcess("ERROR", 'Too many errors occurred');
+            }
+        },
+
+        /**
+         * 包装异步函数，添加错误处理
+         * @param {Function} fn - 异步函数
+         * @param {string} context - 错误上下文
+         * @returns {Function} - 包装后的函数
+         */
+        wrapAsync(fn, context = 'Async operation') {
+            return async (...args) => {
+                try {
+                    return await fn(...args);
+                } catch (error) {
+                    this.handleError(error, context);
+                    throw error;
+                }
+            };
+        },
+
+        /**
+         * 包装同步函数，添加错误处理
+         * @param {Function} fn - 同步函数
+         * @param {string} context - 错误上下文
+         * @returns {Function} - 包装后的函数
+         */
+        wrapSync(fn, context = 'Sync operation') {
+            return (...args) => {
+                try {
+                    return fn(...args);
+                } catch (error) {
+                    this.handleError(error, context);
+                    throw error;
+                }
+            };
+        },
+
+        /**
+         * 重置错误计数器
+         */
+        reset() {
+            this.errorCount = 0;
+            this.errorTypes.clear();
+        },
+
+        /**
+         * 获取错误统计
+         * @returns {Object} - 错误统计信息
+         */
+        getStats() {
+            return {
+                totalCount: this.errorCount,
+                types: Object.fromEntries(this.errorTypes)
+            };
+        }
+    };
+
+    // ==========================================
+    // 6. 性能监控
+    // ==========================================
+
+    const PerformanceMonitor = {
+        metrics: new Map(),
+        timers: new Map(),
+        enabled: CONFIG_CONSTANTS.DEBUG,
+
+        startTimer(label) {
+            if (!this.enabled) return;
+            this.timers.set(label, performance.now());
+        },
+
+        endTimer(label) {
+            if (!this.enabled || !this.timers.has(label)) return;
+            const duration = performance.now() - this.timers.get(label);
+            this.timers.delete(label);
+            this.recordMetric(label, duration);
+            dlog(`Performance [${label}]: ${duration.toFixed(2)}ms`);
+        },
+
+        recordMetric(label, value) {
+            if (!this.enabled) return;
+            if (!this.metrics.has(label)) {
+                this.metrics.set(label, []);
+            }
+            this.metrics.get(label).push(value);
+        },
+
+        getStats() {
+            const stats = {};
+            for (const [label, values] of this.metrics) {
+                const sum = values.reduce((a, b) => a + b, 0);
+                const avg = sum / values.length;
+                const min = Math.min(...values);
+                const max = Math.max(...values);
+                stats[label] = {
+                    count: values.length,
+                    avg: avg.toFixed(2),
+                    min: min.toFixed(2),
+                    max: max.toFixed(2)
+                };
+            }
+            return stats;
+        },
+
+        reset() {
+            this.metrics.clear();
+            this.timers.clear();
+        }
+    };
+
+    // ==========================================
+    // 7. 缓存管理
     // ==========================================
     
     /**
      * 解析当前对话的 ID
      * 从 URL 或页面元素中提取唯一标识符
+     * @returns {string} - 对话ID
      */
     function getCurrentConversationId() {
         const url = window.location.href;
-        
+
+        // 验证URL安全性
+        if (!SecurityUtils.isValidUrl(url)) {
+            console.warn('[AI Studio Exporter] URL validation failed, using fallback ID');
+            return `fallback_${SecurityUtils.hashString(Date.now().toString())}`;
+        }
+
         // 检查是否有 conversation ID 在 URL 中
         const urlMatch = url.match(/conversation\/([^/?]+)/i) || url.match(/prompt\/([^/?]+)/i);
         if (urlMatch && urlMatch[1]) {
-            return urlMatch[1];
+            const id = urlMatch[1];
+            // 验证ID长度和安全性
+            if (id.length > 0 && id.length < 1000 && SecurityUtils.isValidString(id, 1000)) {
+                return id;
+            }
         }
-        
+
         // 作为后备，使用页面标题或其他唯一标识
         const title = document.title;
         const domain = window.location.hostname;
         const path = window.location.pathname;
-        
-        // Use a better string hash (djb2 algorithm)
+
+        // 使用安全的哈希算法
         const hashString = `${title}${domain}${path}`;
-        let hash = 5381;
-        for (let i = 0; i < hashString.length; i++) {
-            hash = ((hash << 5) + hash) + hashString.charCodeAt(i);
-        }
-        hash = (hash >>> 0).toString(36); // Convert to unsigned and base36
-        
+        const hash = SecurityUtils.hashString(hashString);
+
         return `fallback_${hash}`;
     }
-    
+
     /**
      * 从缓存加载对话数据
      */
     function loadCachedConversationData() {
         const conversationId = getCurrentConversationId();
         if (!conversationId) return null;
-        
+
         try {
             const cached = GM_getValue(`aistudio_cache_${conversationId}`, null);
             if (cached) {
-                const parsed = JSON.parse(cached);
-                console.log(`[AI Studio Exporter] 从缓存加载对话数据: ${conversationId}`);
+                // 反混淆数据
+                const deobfuscated = SecurityUtils.deobfuscate(cached);
+                const parsed = JSON.parse(deobfuscated);
+                dlog(`从缓存加载对话数据: ${conversationId}`);
                 return parsed;
             }
         } catch (err) {
-            console.log(`[AI Studio Exporter] 加载缓存失败: ${err.message}`);
+            dlog(`加载缓存失败: ${err.message}`);
         }
         return null;
     }
-    
+
     /**
      * 保存对话数据到缓存
      */
     function saveConversationDataToCache(data) {
         const conversationId = getCurrentConversationId();
         if (!conversationId || !data) return false;
-        
+
         try {
+            // 验证数据大小
+            const dataStr = JSON.stringify(data);
+            if (dataStr.length > 5 * 1024 * 1024) { // 5MB 限制
+                console.warn('[AI Studio Exporter] 数据过大，跳过缓存');
+                return false;
+            }
+
+            // 混淆数据
+            const obfuscated = SecurityUtils.obfuscate(dataStr);
+
             const cacheData = {
-                data: data,
+                data: obfuscated,
                 timestamp: Date.now(),
                 conversationId: conversationId
             };
             GM_setValue(`aistudio_cache_${conversationId}`, JSON.stringify(cacheData));
-            console.log(`[AI Studio Exporter] 对话数据保存到缓存: ${conversationId}`);
-            return true;
-        } catch (err) {
-            console.log(`[AI Studio Exporter] 保存缓存失败: ${err.message}`);
+                dlog(`对话数据保存到缓存: ${conversationId}`);
+                return true;
+            } catch (err) {
+                dlog(`保存缓存失败: ${err.message}`);
             return false;
         }
     }
-    
+
     /**
      * 检查缓存是否有效
      */
@@ -741,7 +1009,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         const age = Date.now() - timestamp;
         return age < maxAgeMs;
     }
-    
+
     /**
      * 清除过期缓存
      */
@@ -749,13 +1017,13 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         try {
             // 注意：GM_listValues 可能不可用，需要检查支持
             if (typeof GM_listValues !== 'function') {
-                console.log(`[AI Studio Exporter] GM_listValues 不可用，跳过缓存清理`);
+                dlog(`GM_listValues 不可用，跳过缓存清理`);
                 return;
             }
-            
+
             const keys = GM_listValues();
             const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000); // 24小时
-            
+
             keys.forEach(key => {
                 if (key.startsWith('aistudio_cache_')) {
                     try {
@@ -763,7 +1031,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                         if (cached.timestamp && cached.timestamp < oneDayAgo) {
                             if (typeof GM_deleteValue === 'function') {
                                 GM_deleteValue(key);
-                                console.log(`[AI Studio Exporter] 清除过期缓存: ${key}`);
+                                dlog(`清除过期缓存: ${key}`);
                             }
                         }
                     } catch (err) {
@@ -774,10 +1042,10 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                 }
             });
         } catch (err) {
-            console.log(`[AI Studio Exporter] 缓存清理失败: ${err.message}`);
+            dlog(`缓存清理失败: ${err.message}`);
         }
     }
-    
+
     /**
      * 清除除当前对话外的所有缓存
      * 用于切换对话时保持缓存清洁
@@ -786,13 +1054,13 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         try {
             // 注意：GM_listValues 可能不可用，需要检查支持
             if (typeof GM_listValues !== 'function') {
-                console.log(`[AI Studio Exporter] GM_listValues 不可用，跳过旧缓存清理`);
+                dlog(`GM_listValues 不可用，跳过旧缓存清理`);
                 return;
             }
-            
+
             const currentConversationId = getCurrentConversationId();
             const keys = GM_listValues();
-            
+
             keys.forEach(key => {
                 if (key.startsWith('aistudio_cache_')) {
                     // 只保留当前对话的缓存
@@ -800,13 +1068,44 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                     if (cacheId !== currentConversationId) {
                         if (typeof GM_deleteValue === 'function') {
                             GM_deleteValue(key);
-                            console.log(`[AI Studio Exporter] 切换对话，清除旧缓存: ${key}`);
+                            dlog(`切换对话，清除旧缓存: ${key}`);
                         }
                     }
                 }
             });
         } catch (err) {
-            console.log(`[AI Studio Exporter] 旧缓存清理失败: ${err.message}`);
+            dlog(`旧缓存清理失败: ${err.message}`);
+        }
+    }
+
+    /**
+     * 清除所有缓存
+     * 提供给用户手动清理缓存的功能
+     */
+    function clearAllCaches() {
+        try {
+            if (typeof GM_listValues !== 'function') {
+                dlog(`GM_listValues 不可用，无法清除缓存`);
+                return false;
+            }
+
+            const keys = GM_listValues();
+            let clearedCount = 0;
+
+            keys.forEach(key => {
+                if (key.startsWith('aistudio_cache_')) {
+                    if (typeof GM_deleteValue === 'function') {
+                        GM_deleteValue(key);
+                        clearedCount++;
+                    }
+                }
+            });
+
+            dlog(`清除了 ${clearedCount} 个缓存`);
+            return true;
+        } catch (err) {
+            dlog(`清除所有缓存失败: ${err.message}`);
+            return false;
         }
     }
     
@@ -818,9 +1117,11 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     // ==========================================
 
     console.log("[AI Studio Exporter] 正在设置 XHR 拦截器...");
-    
+
     const originalOpen = XMLHttpRequest.prototype.open;
     const originalSend = XMLHttpRequest.prototype.send;
+    const originalOpenDescriptor = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'open');
+    const originalSendDescriptor = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'send');
 
     XMLHttpRequest.prototype.open = function(method, url) {
         this._url = url;
@@ -829,7 +1130,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
 
     /**
      * 拦截XMLHttpRequest请求，捕获对话数据
-     * 
+     *
      * @param {*} body - 请求体
      * @returns {*} - 原始send方法的返回值
      */
@@ -842,15 +1143,15 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                         dlog(`[AI Studio Exporter] XHR interceptor: Invalid response status (${this.status}) for ${this._url}`);
                         return;
                     }
-                    
+
                     const rawText = this.responseText.replace(/^\)\]\}'/, '').trim();
-                    
+
                     // 安全处理：验证响应大小，防止过大的响应导致内存问题
-                    if (rawText.length > 10 * 1024 * 1024) { // 10MB 限制
+                    if (rawText.length > 10 * 1024 * 1024) {
                         dlog(`[AI Studio Exporter] Response too large (${rawText.length} chars), skipping.`);
                         return;
                     }
-                    
+
                     let json;
                     try {
                         json = JSON.parse(rawText);
@@ -864,7 +1165,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                         dlog(`[AI Studio Exporter] XHR interceptor: Invalid data structure, expected array`);
                         return;
                     }
-                    
+
                     let endpoint = 'ResolveDriveResource';
                     if (this._url.includes('CreatePrompt')) endpoint = 'CreatePrompt';
                     else if (this._url.includes('UpdatePrompt')) endpoint = 'UpdatePrompt';
@@ -873,43 +1174,43 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                         json = [json];
                     }
 
-                    // 优先级策略： 
-                    // 1. CreatePrompt/UpdatePrompt 优先于 ResolveDriveResource 
-                    // 2. 相同端点下，选择数据更大的响应 
+                    // 优先级策略：
+                    // 1. CreatePrompt/UpdatePrompt 优先于 ResolveDriveResource
+                    // 2. 相同端点下，选择数据更大的响应
                     const currentPriority = endpoint === 'ResolveDriveResource' ? 1 : 2;
-                    const existingPriority = capturedChatData ? 
+                    const existingPriority = capturedChatData ?
                         (capturedChatData._endpoint === 'ResolveDriveResource' ? 1 : 2) : 0;
-                    
+
                     const currentSize = JSON.stringify(json).length;
-                    const existingSize = capturedChatData ? 
+                    const existingSize = capturedChatData ?
                         JSON.stringify(capturedChatData).length : 0;
 
-                    const shouldUpdate = !capturedChatData || 
-                        currentPriority > existingPriority || 
+                    const shouldUpdate = !capturedChatData ||
+                        currentPriority > existingPriority ||
                         (currentPriority === existingPriority && currentSize > existingSize);
 
                     if (shouldUpdate) {
-                        console.log(`[AI Studio Exporter] ${endpoint} intercepted. Size: ${rawText.length} chars.`);
-                        console.log(`[AI Studio Exporter] Captured data structure:`, json);
-                        
-                        // 标记数据来源，用于后续比较 
+                        dlog(`${endpoint} intercepted. Size: ${rawText.length} chars.`);
+                        dlog(`Captured data structure:`, json);
+
+                        // 标记数据来源，用于后续比较
                         json._endpoint = endpoint;
                         json._captureTime = Date.now();
-                        
+
                         capturedChatData = json;
                         capturedTimestamp = json._captureTime;
-                        
-                        console.log(`[AI Studio Exporter] Data captured at: ${new Date(capturedTimestamp).toLocaleTimeString()}`);
-                        
+
+                        dlog(`Data captured at: ${new Date(capturedTimestamp).toLocaleTimeString()}`);
+
                         // 保存到缓存，添加错误处理
                         try {
                             saveConversationDataToCache(json);
-                            console.log(`[AI Studio Exporter] Data saved to cache`);
+                            dlog(`Data saved to cache`);
                         } catch (cacheErr) {
-                            console.log(`[AI Studio Exporter] Failed to save data to cache: ${cacheErr.message}`);
+                            dlog(`Failed to save data to cache: ${cacheErr.message}`);
                         }
                     } else {
-                        console.log(`[AI Studio Exporter] 跳过较小或低优先级的 ${endpoint} 响应 (${currentSize} vs ${existingSize} bytes)`);
+                        dlog(`跳过较小或低优先级的 ${endpoint} 响应 (${currentSize} vs ${existingSize} bytes)`);
                     }
                 } catch (err) {
                     dlog(`[AI Studio Exporter] XHR interceptor error: ${err.message}`);
@@ -923,6 +1224,28 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     };
 
     console.log("[AI Studio Exporter] XHR 拦截器设置完成");
+
+    /**
+     * 清理XHR拦截器，恢复原始原型
+     * 用于脚本卸载或需要禁用拦截器时
+     */
+    function cleanupXHRInterceptor() {
+        try {
+            if (originalOpenDescriptor) {
+                Object.defineProperty(XMLHttpRequest.prototype, 'open', originalOpenDescriptor);
+            } else {
+                XMLHttpRequest.prototype.open = originalOpen;
+            }
+            if (originalSendDescriptor) {
+                Object.defineProperty(XMLHttpRequest.prototype, 'send', originalSendDescriptor);
+            } else {
+                XMLHttpRequest.prototype.send = originalSend;
+            }
+            dlog("XHR 拦截器已清理");
+        } catch (e) {
+            console.error('[AI Studio Exporter] 清理XHR拦截器失败:', e);
+        }
+    }
 
     // XHR 解析逻辑 (新增)
     function isTurn(arr) {
@@ -1079,8 +1402,311 @@ function isResponseTurn(turn) {
 }
 
     // ==========================================
-    // 5. Raw Mode 自动切换 (新增)
+    // 5. DOM 查询缓存 (新增 - 性能优化)
     // ==========================================
+    const DOMCache = {
+        cache: new Map(),
+        maxCacheSize: 1000,
+        hitCount: 0,
+        missCount: 0,
+
+        /**
+         * 生成缓存键
+         * @param {HTMLElement} element - DOM元素
+         * @param {string} selector - 选择器
+         * @returns {string} - 缓存键
+         */
+        generateKey(element, selector) {
+            if (!element || !element.id) return null;
+            return `${element.id}::${selector}`;
+        },
+
+        /**
+         * 从缓存获取查询结果
+         * @param {HTMLElement} element - DOM元素
+         * @param {string} selector - 选择器
+         * @returns {Element|null} - 查询结果
+         */
+        get(element, selector) {
+            const key = this.generateKey(element, selector);
+            if (!key) return null;
+
+            const cached = this.cache.get(key);
+            if (cached) {
+                // 验证元素是否仍在DOM中
+                if (document.contains(cached)) {
+                    this.hitCount++;
+                    UsageStats.recordCacheHit();
+                    return cached;
+                } else {
+                    this.cache.delete(key);
+                }
+            }
+            this.missCount++;
+            UsageStats.recordCacheMiss();
+            return null;
+        },
+
+        /**
+         * 将查询结果存入缓存
+         * @param {HTMLElement} element - DOM元素
+         * @param {string} selector - 选择器
+         * @param {Element} result - 查询结果
+         */
+        set(element, selector, result) {
+            const key = this.generateKey(element, selector);
+            if (!key || !result) return;
+
+            // 限制缓存大小
+            if (this.cache.size >= this.maxCacheSize) {
+                // 清除最旧的缓存项
+                const firstKey = this.cache.keys().next().value;
+                this.cache.delete(firstKey);
+            }
+
+            this.cache.set(key, result);
+        },
+
+        /**
+         * 清除所有缓存
+         */
+        clear() {
+            this.cache.clear();
+            this.hitCount = 0;
+            this.missCount = 0;
+        },
+
+        /**
+         * 获取缓存统计信息
+         * @returns {Object} - 统计信息
+         */
+        getStats() {
+            const total = this.hitCount + this.missCount;
+            const hitRate = total > 0 ? (this.hitCount / total * 100).toFixed(2) : 0;
+            return {
+                size: this.cache.size,
+                hitCount: this.hitCount,
+                missCount: this.missCount,
+                hitRate: `${hitRate}%`
+            };
+        }
+    };
+
+    /**
+     * 带缓存的querySelector
+     * @param {HTMLElement} element - DOM元素
+     * @param {string} selector - 选择器
+     * @returns {Element|null} - 查询结果
+     */
+    function cachedQuerySelector(element, selector) {
+        // 先尝试从缓存获取
+        const cached = DOMCache.get(element, selector);
+        if (cached) return cached;
+
+        // 缓存未命中，执行查询
+        const result = element.querySelector(selector);
+        if (result) {
+            DOMCache.set(element, selector, result);
+        }
+        return result;
+    }
+
+    /**
+     * 带缓存的querySelectorAll
+     * @param {HTMLElement} element - DOM元素
+     * @param {string} selector - 选择器
+     * @returns {NodeList} - 查询结果
+     */
+    function cachedQuerySelectorAll(element, selector) {
+        // querySelectorAll 不缓存，因为返回NodeList且可能变化
+        // 只对单个元素查询进行缓存
+        return element.querySelectorAll(selector);
+    }
+
+    // ==========================================
+    // 8. 内存管理
+    // ==========================================
+
+    const MemoryManager = {
+        cleanupInterval: null,
+        lastCleanupTime: 0,
+        cleanupThreshold: 10 * 1024 * 1024, // 10MB
+
+        startAutoCleanup() {
+            if (this.cleanupInterval) return;
+            this.cleanupInterval = setInterval(() => {
+                this.performCleanup();
+            }, CONFIG_CONSTANTS.CACHE_CLEANUP_INTERVAL);
+        },
+
+        stopAutoCleanup() {
+            if (this.cleanupInterval) {
+                clearInterval(this.cleanupInterval);
+                this.cleanupInterval = null;
+            }
+        },
+
+        performCleanup() {
+            const now = Date.now();
+            if (now - this.lastCleanupTime < CONFIG_CONSTANTS.CACHE_CLEANUP_INTERVAL) {
+                return;
+            }
+
+            dlog('MemoryManager: Starting cleanup...');
+
+            // 清理过期缓存
+            clearExpiredCache();
+
+            // 清理DOM缓存
+            DOMCache.clear();
+
+            // 清理性能监控数据
+            PerformanceMonitor.reset();
+
+            // 清理错误统计
+            ErrorHandler.reset();
+
+            this.lastCleanupTime = now;
+            dlog('MemoryManager: Cleanup completed');
+        },
+
+        getMemoryUsage() {
+            if (performance.memory) {
+                return {
+                    usedJSHeapSize: (performance.memory.usedJSHeapSize / 1024 / 1024).toFixed(2) + ' MB',
+                    totalJSHeapSize: (performance.memory.totalJSHeapSize / 1024 / 1024).toFixed(2) + ' MB',
+                    jsHeapSizeLimit: (performance.memory.jsHeapSizeLimit / 1024 / 1024).toFixed(2) + ' MB'
+                };
+            }
+            return null;
+        },
+
+        checkMemoryPressure() {
+            const usage = this.getMemoryUsage();
+            if (usage) {
+                const used = parseFloat(usage.usedJSHeapSize);
+                const total = parseFloat(usage.totalJSHeapSize);
+                const ratio = used / total;
+
+                if (ratio > 0.8) {
+                    dlog(`MemoryManager: High memory usage detected (${(ratio * 100).toFixed(1)}%)`);
+                    this.performCleanup();
+                    return true;
+                }
+            }
+            return false;
+        }
+    };
+
+    // ==========================================
+    // 9. 使用统计和分析
+    // ==========================================
+
+    const UsageStats = {
+        stats: {
+            totalExports: 0,
+            totalCharacters: 0,
+            totalTurns: 0,
+            lastExportTime: null,
+            exportModes: new Map(),
+            errorCount: 0,
+            averageExportTime: 0,
+            cacheHits: 0,
+            cacheMisses: 0
+        },
+
+        recordExport(mode, characterCount, turnCount, duration) {
+            this.stats.totalExports++;
+            this.stats.totalCharacters += characterCount;
+            this.stats.totalTurns += turnCount;
+            this.stats.lastExportTime = new Date().toISOString();
+
+            const modeCount = this.stats.exportModes.get(mode) || 0;
+            this.stats.exportModes.set(mode, modeCount + 1);
+
+            if (duration) {
+                const currentAvg = this.stats.averageExportTime;
+                const totalExports = this.stats.totalExports;
+                this.stats.averageExportTime = (currentAvg * (totalExports - 1) + duration) / totalExports;
+            }
+
+            this.saveStats();
+        },
+
+        recordError() {
+            this.stats.errorCount++;
+            this.saveStats();
+        },
+
+        recordCacheHit() {
+            this.stats.cacheHits++;
+        },
+
+        recordCacheMiss() {
+            this.stats.cacheMisses++;
+        },
+
+        getStats() {
+            return {
+                ...this.stats,
+                exportModes: Object.fromEntries(this.stats.exportModes),
+                cacheHitRate: this.stats.cacheHits + this.stats.cacheMisses > 0
+                    ? ((this.stats.cacheHits / (this.stats.cacheHits + this.stats.cacheMisses)) * 100).toFixed(2) + '%'
+                    : '0%'
+            };
+        },
+
+        saveStats() {
+            try {
+                const statsToSave = {
+                    ...this.stats,
+                    exportModes: Object.fromEntries(this.stats.exportModes)
+                };
+                GM_setValue('aistudio_usage_stats', JSON.stringify(statsToSave));
+            } catch (e) {
+                dlog('Failed to save usage stats:', e);
+            }
+        },
+
+        loadStats() {
+            try {
+                const saved = GM_getValue('aistudio_usage_stats', null);
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    this.stats = {
+                        ...this.stats,
+                        ...parsed,
+                        exportModes: new Map(Object.entries(parsed.exportModes || {}))
+                    };
+                }
+            } catch (e) {
+                dlog('Failed to load usage stats:', e);
+            }
+        },
+
+        resetStats() {
+            this.stats = {
+                totalExports: 0,
+                totalCharacters: 0,
+                totalTurns: 0,
+                lastExportTime: null,
+                exportModes: new Map(),
+                errorCount: 0,
+                averageExportTime: 0,
+                cacheHits: 0,
+                cacheMisses: 0
+            };
+            this.saveStats();
+        }
+    };
+
+    // 初始化时加载统计
+    UsageStats.loadStats();
+
+    // ==========================================
+    // 10. 模式检测和切换
+    // ==========================================
+
     function detectCurrentMode() {
         const firstUserTurn = document.querySelector('ms-chat-turn .chat-turn-container.user');
         if (firstUserTurn) {
@@ -1141,7 +1767,7 @@ function isResponseTurn(turn) {
     }
 
     // ==========================================
-    // 6. 设置面板 (新增)
+    // 11. 设置面板
     // ==========================================
     const SettingsPanel = {
         shadowHost: null,
@@ -1240,6 +1866,85 @@ function isResponseTurn(turn) {
             const separator = document.createElement('div');
             separator.className = 'separator';
             this.panel.appendChild(separator);
+
+            // 添加使用统计部分
+            const statsTitle = document.createElement('div');
+            statsTitle.className = 'section-title';
+            statsTitle.textContent = '使用统计';
+            this.panel.appendChild(statsTitle);
+
+            const statsContainer = document.createElement('div');
+            statsContainer.className = 'stats-container';
+            statsContainer.style.cssText = `
+                font-size: 12px;
+                color: #666;
+                padding: 8px 0;
+                line-height: 1.6;
+            `;
+
+            const updateStatsDisplay = () => {
+                const stats = UsageStats.getStats();
+                const memoryUsage = MemoryManager.getMemoryUsage();
+                const domCacheStats = DOMCache.getStats();
+
+                let statsHTML = `
+                    <div style="margin-bottom: 8px;">
+                        <strong>导出统计:</strong><br>
+                        总导出次数: ${stats.totalExports}<br>
+                        总字符数: ${stats.totalCharacters.toLocaleString()}<br>
+                        总回合数: ${stats.totalTurns}<br>
+                        平均导出时间: ${stats.averageExportTime.toFixed(2)}ms<br>
+                        错误次数: ${stats.errorCount}
+                    </div>
+                    <div style="margin-bottom: 8px;">
+                        <strong>导出模式:</strong><br>
+                        ${Object.entries(stats.exportModes).map(([mode, count]) => `${mode}: ${count}次`).join('<br>') || '无'}
+                    </div>
+                    <div style="margin-bottom: 8px;">
+                        <strong>缓存统计:</strong><br>
+                        缓存命中率: ${stats.cacheHitRate}<br>
+                        DOM缓存: ${domCacheStats.hitRate} (${domCacheStats.size}项)
+                    </div>
+                `;
+
+                if (memoryUsage) {
+                    statsHTML += `
+                        <div>
+                            <strong>内存使用:</strong><br>
+                            已用: ${memoryUsage.usedJSHeapSize}<br>
+                            总计: ${memoryUsage.totalJSHeapSize}<br>
+                            限制: ${memoryUsage.jsHeapSizeLimit}
+                        </div>
+                    `;
+                }
+
+                statsContainer.innerHTML = statsHTML;
+            };
+
+            const resetStatsButton = document.createElement('button');
+            resetStatsButton.textContent = '重置统计';
+            resetStatsButton.style.cssText = `
+                margin-top: 8px;
+                padding: 4px 12px;
+                font-size: 11px;
+                background: #f5f5f5;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                cursor: pointer;
+            `;
+            resetStatsButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (confirm('确定要重置所有使用统计吗？')) {
+                    UsageStats.resetStats();
+                    updateStatsDisplay();
+                }
+            });
+
+            this.panel.appendChild(statsContainer);
+            this.panel.appendChild(resetStatsButton);
+
+            // 保存更新统计的函数以便后续调用
+            this.updateStatsDisplay = updateStatsDisplay;
 
             const methodTitle = document.createElement('div');
             methodTitle.className = 'section-title';
@@ -1402,6 +2107,11 @@ function isResponseTurn(turn) {
             this.updateCheckboxStates();
             this.updateToggleState();
 
+            // 更新使用统计显示
+            if (this.updateStatsDisplay) {
+                this.updateStatsDisplay();
+            }
+
             const rect = anchorElement.getBoundingClientRect();
             this.panel.style.top = `${rect.bottom + 4}px`;
             this.panel.style.right = `${window.innerWidth - rect.right}px`;
@@ -1464,8 +2174,43 @@ function isResponseTurn(turn) {
     };
 
     // ==========================================
-    // 6. UI 逻辑
+    // 12. UI 逻辑
     // ==========================================
+
+    /**
+     * 创建模式选择按钮的通用函数
+     * @param {string} id - 按钮ID
+     * @param {string} text - 按钮文本
+     * @param {boolean} isPrimary - 是否为主按钮
+     * @param {Function} onClick - 点击事件处理函数
+     * @param {HTMLElement} container - 按钮容器
+     * @returns {HTMLButtonElement} - 创建的按钮元素
+     */
+    function createModeButton(id, text, isPrimary, onClick, container) {
+        const btn = document.createElement('button');
+        btn.id = id;
+        btn.className = (isPrimary ? 'ai-btn' : 'ai-btn ai-btn-secondary') + ' ai-mode-btn';
+        btn.textContent = text;
+        btn.onclick = onClick;
+        if (container) {
+            container.appendChild(btn);
+        }
+        return btn;
+    }
+
+    /**
+     * 清理并准备按钮容器
+     * @param {HTMLElement} btnContainer - 按钮容器
+     */
+    function prepareButtonContainer(btnContainer) {
+        const saveBtn = overlay.querySelector('#ai-save-btn');
+        const closeBtnEl = overlay.querySelector('#ai-close-btn');
+        if (saveBtn) saveBtn.style.display = 'none';
+        if (closeBtnEl) closeBtnEl.style.display = 'none';
+        btnContainer.style.display = 'flex';
+        btnContainer.querySelectorAll('.ai-mode-btn').forEach(btn => btn.remove());
+    }
+
     function createEntryButton() {
         if (document.getElementById('ai-entry-btn-v14')) return;
         const btn = document.createElement('button');
@@ -1553,7 +2298,7 @@ function isResponseTurn(turn) {
 
     function resetExportState() {
         collectedData.clear();
-        turnOrder = [];
+        turnOrder.length = 0;
         processedTurnIds.clear();
         scannedAttachmentTurns.clear();
         cachedExportBlob = null;
@@ -1613,31 +2358,12 @@ function isResponseTurn(turn) {
             countEl.innerText = '';
 
             const btnContainer = overlay.querySelector('.ai-btn-container');
-            // Hide the persistent save/close pair while in mode-selection UI
-            const saveBtn = overlay.querySelector('#ai-save-btn');
-            const closeBtnEl = overlay.querySelector('#ai-close-btn');
-            if (saveBtn) saveBtn.style.display = 'none';
-            if (closeBtnEl) closeBtnEl.style.display = 'none';
-
-            btnContainer.style.display = 'flex';
-            // Remove any previously created mode buttons but keep save/close
-            btnContainer.querySelectorAll('.ai-mode-btn').forEach(btn => btn.remove());
-
-            // Helper to create buttons
-            const createModeButton = (id, text, isPrimary, onClick) => {
-                const btn = document.createElement('button');
-                btn.id = id;
-                btn.className = (isPrimary ? 'ai-btn' : 'ai-btn ai-btn-secondary') + ' ai-mode-btn';
-                btn.textContent = text;
-                btn.onclick = onClick;
-                btnContainer.appendChild(btn);
-                return btn;
-            };
+            prepareButtonContainer(btnContainer);
 
             const fullBtn = createModeButton('ai-mode-full', t('btn_mode_full'), true, () => {
                 exportMode = 'full';
                 resolve('full');
-            });
+            }, btnContainer);
             fullBtn.disabled = true;
             const fullHint = document.createElement('span');
             fullHint.className = 'ai-hint';
@@ -1647,12 +2373,12 @@ function isResponseTurn(turn) {
             createModeButton('ai-mode-text', t('btn_mode_text'), false, () => {
                 exportMode = 'text';
                 resolve('text');
-            });
+            }, btnContainer);
 
             createModeButton('ai-mode-close', t('btn_close'), false, () => {
                 overlay.style.display = 'none';
                 reject(new Error('Export cancelled by user.'));
-            });
+            }, btnContainer);
         });
     }
 
@@ -1687,35 +2413,21 @@ function isResponseTurn(turn) {
             statusEl.innerHTML = t('status_zip_missing');
             countEl.innerText = '';
             const btnContainer = overlay.querySelector('.ai-btn-container');
-            const saveBtn = overlay.querySelector('#ai-save-btn');
-            const closeBtnEl = overlay.querySelector('#ai-close-btn');
-            if (saveBtn) saveBtn.style.display = 'none';
-            if (closeBtnEl) closeBtnEl.style.display = 'none';
-            btnContainer.style.display = 'flex';
-            btnContainer.querySelectorAll('.ai-mode-btn').forEach(btn => btn.remove());
-
-            const createModeButton = (id, text, isPrimary, onClick) => {
-                const btn = document.createElement('button');
-                btn.id = id;
-                btn.className = (isPrimary ? 'ai-btn' : 'ai-btn ai-btn-secondary') + ' ai-mode-btn';
-                btn.textContent = text;
-                btn.onclick = onClick;
-                btnContainer.appendChild(btn);
-            };
+            prepareButtonContainer(btnContainer);
 
             createModeButton('ai-fallback-text', t('btn_mode_text'), true, () => {
                 exportMode = 'text';
                 resolve('text');
-            });
+            }, btnContainer);
 
             createModeButton('ai-retry-zip', t('btn_retry'), false, () => {
                 resolve('retry');
-            });
+            }, btnContainer);
 
             createModeButton('ai-cancel', t('btn_cancel'), false, () => {
                 overlay.style.display = 'none';
                 resolve('cancel');
-            });
+            }, btnContainer);
         });
     }
 
@@ -1728,30 +2440,16 @@ function isResponseTurn(turn) {
             statusEl.innerHTML = t('status_cancel');
             countEl.innerText = '';
             const btnContainer = overlay.querySelector('.ai-btn-container');
-            const saveBtn = overlay.querySelector('#ai-save-btn');
-            const closeBtnEl = overlay.querySelector('#ai-close-btn');
-            if (saveBtn) saveBtn.style.display = 'none';
-            if (closeBtnEl) closeBtnEl.style.display = 'none';
-            btnContainer.style.display = 'flex';
-            btnContainer.querySelectorAll('.ai-mode-btn').forEach(btn => btn.remove());
+            prepareButtonContainer(btnContainer);
 
-            const createModeButton = (id, text, isPrimary, onClick) => {
-                const btn = document.createElement('button');
-                btn.id = id;
-                btn.className = (isPrimary ? 'ai-btn' : 'ai-btn ai-btn-secondary') + ' ai-mode-btn';
-                btn.textContent = text;
-                btn.onclick = onClick;
-                btnContainer.appendChild(btn);
-            };
-
-            createModeButton('ai-cancel-text', t('btn_mode_text'), true, () => resolve('text'));
-            createModeButton('ai-cancel-retry', t('btn_retry'), false, () => resolve('retry'));
-            createModeButton('ai-cancel-close', t('btn_cancel'), false, () => resolve('cancel'));
+            createModeButton('ai-cancel-text', t('btn_mode_text'), true, () => resolve('text'), btnContainer);
+            createModeButton('ai-cancel-retry', t('btn_retry'), false, () => resolve('retry'), btnContainer);
+            createModeButton('ai-cancel-close', t('btn_cancel'), false, () => resolve('cancel'), btnContainer);
         });
     }
 
     // ==========================================
-    // 4. 核心流程
+    // 13. 核心流程
     // ==========================================
     // 导出主流程：模式选择 → 倒计时 → 采集 → 导出
     // Main export flow: mode select → countdown → capture → export
@@ -2082,7 +2780,7 @@ function isResponseTurn(turn) {
     }
 
     // ==========================================
-    // 5. 辅助功能
+    // 14. 辅助功能
     // ==========================================
 
     // Shared Regex Constants
@@ -2093,6 +2791,10 @@ function isResponseTurn(turn) {
     const ROLE_GEMINI = 'Gemini';
     const ROLE_GEMINI_THOUGHTS = 'Gemini-Thoughts';
 
+    /**
+     * 查找实际的滚动容器
+     * @returns {HTMLElement} - 滚动容器元素
+     */
     function findRealScroller() {
         // Prioritize finding chat turns within the main content area to avoid sidebars
         const bubble = document.querySelector('main ms-chat-turn') || document.querySelector('ms-chat-turn');
@@ -2113,10 +2815,22 @@ function isResponseTurn(turn) {
     return document.documentElement;
 }
 
+/**
+ * 规范化URL
+ * @param {string} href - 原始URL
+ * @returns {string} - 规范化后的URL
+ */
 function normalizeHref(href) {
     try {
         const raw = String(href || '').trim();
         if (!raw || raw === '#') return '';
+
+        // 验证URL安全性
+        if (!SecurityUtils.isValidUrl(raw)) {
+            console.warn('[AI Studio Exporter] Invalid URL detected:', raw);
+            return '';
+        }
+
         const u = new URL(raw, window.location.href);
         return u.href;
     } catch (_) {
@@ -2125,11 +2839,17 @@ function normalizeHref(href) {
 }
 
 function filterHref(href) {
-        if (!href) return false;
-        const lower = href.toLowerCase();
-        if (lower.startsWith('http:') || lower.startsWith('https:')) return true;
-        if (ATTACHMENT_COMBINED_FALLBACK && lower.startsWith('blob:')) return true;
+    if (!href) return false;
+
+    // 验证URL安全性
+    if (!SecurityUtils.isValidUrl(href)) {
         return false;
+    }
+
+    const lower = href.toLowerCase();
+    if (lower.startsWith('http:') || lower.startsWith('https:')) return true;
+    if (ATTACHMENT_COMBINED_FALLBACK && lower.startsWith('blob:')) return true;
+    return false;
 }
 
 function extractDownloadLinksFromTurn(el) {
@@ -2487,16 +3207,12 @@ function extractDownloadLinksFromTurn(el) {
 
     // Helper: Get role name for display
     function getRoleName(role) {
-        switch (role) {
-            case ROLE_GEMINI_THOUGHTS:
-                return t('role_thoughts');
-            case ROLE_GEMINI:
-                return t('role_gemini');
-            case ROLE_USER:
-                return t('role_user');
-            default:
-                return role; // 为未知的角色类型提供回退
-        }
+        const roleMap = {
+            [ROLE_GEMINI_THOUGHTS]: t('role_thoughts'),
+            [ROLE_GEMINI]: t('role_gemini'),
+            [ROLE_USER]: t('role_user')
+        };
+        return roleMap[role] || role;
     }
 
     // Normalize: merge consecutive Gemini-thoughts-only into next Gemini text within the same segment
@@ -2802,32 +3518,22 @@ function extractDownloadLinksFromTurn(el) {
     }
 
     function toFileName(url) {
-        let base = 'file';
         try {
             const u = new URL(url);
-            base = u.pathname.substring(u.pathname.lastIndexOf('/') + 1) || 'file';
+            let base = u.pathname.substring(u.pathname.lastIndexOf('/') + 1) || 'file';
             if (!base || base === 'file') {
                 const qp = new URLSearchParams(u.search);
-                const cand = qp.get('filename') || qp.get('file') || qp.get('name');
-                if (cand) base = cand;
+                base = qp.get('filename') || qp.get('file') || qp.get('name') || base;
             }
+            return decodeURIComponent(base.replace(/^['"]+|['"]+$/g, ''));
         } catch (_) {
-            base = url.split('/').pop().split('?')[0] || 'file';
-            if (!base || base === 'file') {
-                const m = String(url).match(/[?&](?:filename|file|name)=([^&]+)/i);
-                if (m) base = m[1];
-            }
-        }
-        base = String(base).replace(/^['"]+|['"]+$/g, '');
-        try {
-            return decodeURIComponent(base);
-        } catch (_) {
-            return base;
+            const m = String(url).match(/[?&](?:filename|file|name)=([^&]+)/i);
+            return m ? decodeURIComponent(m[1].replace(/^['"]+|['"]+$/g, '')) : 'file';
         }
     }
 
     function escapeMdLabel(s) {
-        return String(s || '').replace(/]/g, '\\]').replace(/\n/g, ' ');
+        return String(s || '').replace(/\]/g, '\\]').replace(/\n/g, ' ');
     }
 
     function generateAttachmentsMarkdown(item) {
@@ -3075,49 +3781,78 @@ function extractDownloadLinksFromTurn(el) {
 
         if (status === "FINISHED") {
             if (collectedData.size > 0) {
+                // 记录使用统计
+                const startTime = performance.now();
                 downloadCollectedData().then(() => {
+                    const duration = performance.now() - startTime;
+                    
+                    // 计算总字符数和回合数
+                    let totalCharacters = 0;
+                    let totalTurns = 0;
+                    for (const [id, entry] of collectedData) {
+                        totalCharacters += (entry.text || '').length + (entry.thoughts || '').length;
+                        totalTurns++;
+                    }
+                    
+                    // 记录导出统计
+                    UsageStats.recordExport(exportMode, totalCharacters, totalTurns, duration);
+                    
                     updateUI('FINISHED', collectedData.size);
                 }).catch(err => {
                     console.error("Failed to generate and download file:", err);
+                    UsageStats.recordError();
                     updateUI('ERROR', t('err_runtime') + err.message);
                 });
             } else {
                 updateUI('ERROR', t('err_no_data'));
             }
         } else {
+            UsageStats.recordError();
             updateUI('ERROR', msg);
         }
     }
 
     /**
      * 执行最终数据收集，确保在不同滚动位置都能捕获到完整的数据
-     * 
-     * 这是一个重要的步骤，因为有些对话内容可能只在特定滚动位置可见。
-     * 通过在顶部、中间和底部三个关键位置进行数据收集，可以确保：
-     * 1. 所有对话内容都被正确捕获
-     * 2. 动态加载的内容不会被遗漏
-     * 3. 确保完整的上下文信息
-     * 
+     *
+     * 优化版本：只滚动到关键位置，减少不必要的滚动操作
+     * 1. 如果当前不在顶部，先滚动到顶部
+     * 2. 滚动到底部确保加载所有内容
+     * 3. 在顶部和底部各收集一次数据
+     *
      * @param {HTMLElement} scroller - 滚动容器元素
      * @returns {Promise<void>} - 表示最终数据收集完成的Promise
      */
     async function performFinalCollection(scroller) {
         dlog("执行最终数据收集...");
 
-        // 滚动到顶部收集数据
-        scroller.scrollTop = 0;
-        await sleep(FINAL_COLLECTION_DELAY_MS);
-        await captureData(scroller);
+        const currentScrollTop = scroller.scrollTop;
+        const isAtTop = currentScrollTop <= BOTTOM_DETECTION_TOLERANCE;
+        const isAtBottom = currentScrollTop >= scroller.scrollHeight - scroller.clientHeight - BOTTOM_DETECTION_TOLERANCE;
 
-        // 滚动到中间收集数据
-        scroller.scrollTop = scroller.scrollHeight / 2;
-        await sleep(FINAL_COLLECTION_DELAY_MS);
-        await captureData(scroller);
+        // 如果不在顶部，先滚动到顶部
+        if (!isAtTop) {
+            dlog("滚动到顶部...");
+            scroller.scrollTop = 0;
+            await sleep(FINAL_COLLECTION_DELAY_MS);
+            await captureData(scroller);
+        }
 
-        // 滚动到底部收集数据
-        scroller.scrollTop = scroller.scrollHeight;
-        await sleep(FINAL_COLLECTION_DELAY_MS);
-        await captureData(scroller);
+        // 滚动到底部确保加载所有内容
+        if (!isAtBottom) {
+            dlog("滚动到底部...");
+            scroller.scrollTop = scroller.scrollHeight;
+            await sleep(FINAL_COLLECTION_DELAY_MS);
+            await captureData(scroller);
+        }
+
+        // 再次在顶部收集一次，确保捕获所有内容
+        if (!isAtTop || !isAtBottom) {
+            dlog("再次在顶部收集...");
+            scroller.scrollTop = 0;
+            await sleep(FINAL_COLLECTION_DELAY_MS);
+            await captureData(scroller);
+        }
 
         dlog(`最终数据收集完成。总记录数: ${collectedData.size}`);
     }
