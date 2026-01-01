@@ -2572,7 +2572,7 @@ function extractDownloadLinksFromTurn(el) {
                     const quoted = cleanedContent.replace(/\n/g, '\n> ');
                     
                     if (CONFIG.COLLAPSIBLE_THINKING) {
-                        content += `<details>\n<summary>## ${t('role_thoughts')}</summary>\n\n> ${quoted}\n\n</details>\n\n`;
+                        content += `<details>\n<summary>${t('role_thoughts')}</summary>\n\n> ${quoted}\n\n</details>\n\n`;
                     } else {
                         content += `## ${t('role_thoughts')}\n\n> ${quoted}\n\n`;
                     }
