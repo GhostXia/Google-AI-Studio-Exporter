@@ -2254,8 +2254,17 @@ function isResponseTurn(turn) {
     }
 
     function initUI() {
-        if (document.getElementById('ai-overlay-v14')) {
+        // 先检查 DOM 中是否已有元素
+        const existingOverlay = document.getElementById('ai-overlay-v14');
+        if (existingOverlay) {
+            overlay = existingOverlay;
             overlay.style.display = 'flex';
+            // 重新初始化所有元素引用
+            titleEl = overlay.querySelector('.ai-title');
+            statusEl = overlay.querySelector('.ai-status');
+            countEl = overlay.querySelector('.ai-count');
+            closeBtn = overlay.querySelector('#ai-close-btn');
+            const saveBtn = overlay.querySelector('#ai-save-btn');
             return;
         }
         overlay = document.createElement('div');
