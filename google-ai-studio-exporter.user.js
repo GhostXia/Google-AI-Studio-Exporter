@@ -592,12 +592,11 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     let cachedExportBlob = null;
     let cancelRequested = false;
     let isHandlingEscape = false;
-    const EMBED_JSZIP_BASE64 = '';
+
     const DISABLE_SCRIPT_INJECTION = true;
     const ATTACHMENT_COMBINED_FALLBACK = true;
     const ATTACHMENT_MAX_DIST = 160;
     const scannedAttachmentTurns = new Set();
-    const ATTACHMENT_SCAN_CONCURRENCY = 3;
     const JSZIP_URLS = [
         'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
         'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.js',
@@ -626,7 +625,6 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     const RAW_MODE_MENU_DELAY_MS = 200;
     const RAW_MODE_RENDER_DELAY_MS = 300;
     const THOUGHT_EXPAND_DELAY_MS = 500;
-    const THOUGHT_MIN_LENGTH = 10;
     const MAX_SCROLL_ATTEMPTS = 10000;
     const BOTTOM_DETECTION_TOLERANCE = 10;
     const MIN_SCROLL_DISTANCE_THRESHOLD = 5;
@@ -828,36 +826,70 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         return originalOpen.apply(this, arguments);
     };
 
+    /**
+     * 拦截XMLHttpRequest请求，捕获对话数据
+     * 
+     * @param {*} body - 请求体
+     * @returns {*} - 原始send方法的返回值
+     */
     XMLHttpRequest.prototype.send = function(body) {
         this.addEventListener('load', function() {
-            if (this._url && (
-                this._url.includes('ResolveDriveResource') ||
-                this._url.includes('CreatePrompt') ||
-                this._url.includes('UpdatePrompt')
-            )) {
+            if (this._url && (this._url.includes('ResolveDriveResource') || this._url.includes('CreatePrompt') || this._url.includes('UpdatePrompt'))) {
                 try {
+                    // 安全处理：检查响应类型和状态码
+                    if (this.status !== 200 || !this.responseText) {
+                        dlog(`[AI Studio Exporter] XHR interceptor: Invalid response status (${this.status}) for ${this._url}`);
+                        return;
+                    }
+                    
                     const rawText = this.responseText.replace(/^\)\]\}'/, '').trim();
-                    let json = JSON.parse(rawText);
+                    
+                    // 安全处理：验证响应大小，防止过大的响应导致内存问题
+                    if (rawText.length > 10 * 1024 * 1024) { // 10MB 限制
+                        dlog(`[AI Studio Exporter] Response too large (${rawText.length} chars), skipping.`);
+                        return;
+                    }
+                    
+                    let json;
+                    try {
+                        json = JSON.parse(rawText);
+                    } catch (parseErr) {
+                        dlog(`[AI Studio Exporter] XHR interceptor: Failed to parse JSON response: ${parseErr.message}`);
+                        return;
+                    }
 
-                    if (Array.isArray(json) && json.length > 0) {
-                        let endpoint = 'ResolveDriveResource';
-                        if (this._url.includes('CreatePrompt')) endpoint = 'CreatePrompt';
-                        else if (this._url.includes('UpdatePrompt')) endpoint = 'UpdatePrompt';
+                    // 安全处理：严格验证数据结构
+                    if (!Array.isArray(json) || json.length === 0) {
+                        dlog(`[AI Studio Exporter] XHR interceptor: Invalid data structure, expected non-empty array`);
+                        return;
+                    }
+                    
+                    let endpoint = 'ResolveDriveResource';
+                    if (this._url.includes('CreatePrompt')) endpoint = 'CreatePrompt';
+                    else if (this._url.includes('UpdatePrompt')) endpoint = 'UpdatePrompt';
 
-                        if (typeof json[0] === 'string' && json[0].startsWith('prompts/')) {
-                            json = [json];
-                        }
+                    if (typeof json[0] === 'string' && json[0].startsWith('prompts/')) {
+                        json = [json];
+                    }
 
-                        console.log(`[AI Studio Exporter] ${endpoint} intercepted. Size: ${rawText.length} chars.`);
-                        console.log(`[AI Studio Exporter] Captured data structure:`, json);
-                        capturedChatData = json;
-                        capturedTimestamp = Date.now();
-                        console.log(`[AI Studio Exporter] Data captured at: ${new Date(capturedTimestamp).toLocaleTimeString()}`);
-                        // 保存到缓存
+                    dlog(`[AI Studio Exporter] ${endpoint} intercepted. Size: ${rawText.length} chars.`);
+                    dlog(`[AI Studio Exporter] Captured data structure:`, json);
+                    capturedChatData = json;
+                    capturedTimestamp = Date.now();
+                    dlog(`[AI Studio Exporter] Data captured at: ${new Date(capturedTimestamp).toLocaleTimeString()}`);
+                    
+                    // 保存到缓存，添加错误处理
+                    try {
                         saveConversationDataToCache(json);
+                        dlog(`[AI Studio Exporter] Data saved to cache`);
+                    } catch (cacheErr) {
+                        dlog(`[AI Studio Exporter] Failed to save data to cache: ${cacheErr.message}`);
                     }
                 } catch (err) {
-                    console.log(`[AI Studio Exporter] XHR interceptor error: ${err.message}`);
+                    dlog(`[AI Studio Exporter] XHR interceptor error: ${err.message}`);
+                    if (DEBUG) {
+                        console.error('[AI Studio Exporter] XHR interceptor detailed error:', err);
+                    }
                 }
             }
         });
@@ -1598,21 +1630,21 @@ function isResponseTurn(turn) {
     // 导出主流程：模式选择 → 倒计时 → 采集 → 导出
     // Main export flow: mode select → countdown → capture → export
     async function processXHRData() {
-        console.log("[AI Studio Exporter] 开始处理 XHR 数据...");
+        dlog("[AI Studio Exporter] 开始处理 XHR 数据...");
         
         // 检查 XHR 数据是否可用
         if (!capturedChatData) {
-            console.log("[AI Studio Exporter] 没有捕获到 XHR 数据");
+            dlog("[AI Studio Exporter] 没有捕获到 XHR 数据");
             return false;
         }
         
         const history = findHistoryRecursive(capturedChatData);
         if (!history || history.length === 0) {
-            console.log("[AI Studio Exporter] 未找到聊天历史");
+            dlog("[AI Studio Exporter] 未找到聊天历史");
             return false;
         }
         
-        console.log(`[AI Studio Exporter] 找到 ${history.length} 个聊天回合`);
+        dlog(`[AI Studio Exporter] 找到 ${history.length} 个聊天回合`);
 
         let processedCount = 0;
         const newTurnOrder = [];
@@ -1665,10 +1697,10 @@ function isResponseTurn(turn) {
             newTurnOrder.push(turnId);
             processedCount++;
 
-            console.log(`[AI Studio Exporter] 处理回合 ${i + 1}/${history.length}: ${role}, 文本长度: ${text.length}`);
+            dlog(`[AI Studio Exporter] 处理回合 ${i + 1}/${history.length}: ${role}, 文本长度: ${text.length}`);
         }
 
-        console.log(`[AI Studio Exporter] XHR 处理完成：成功处理 ${processedCount} 个回合`);
+        dlog(`[AI Studio Exporter] XHR 处理完成：成功处理 ${processedCount} 个回合`);
 
         // Update global turnOrder
         turnOrder.length = 0;
@@ -1678,6 +1710,11 @@ function isResponseTurn(turn) {
         return true;
     }
 
+    /**
+     * 启动导出流程，包括模式选择、倒计时、数据采集和导出
+     * 
+     * @returns {Promise<void>} - 表示导出流程完成的Promise
+     */
     async function startProcess() {
         if (isRunning) return;
         resetExportState();
@@ -1887,6 +1924,9 @@ function isResponseTurn(turn) {
             return;
         }
 
+        // 执行最终数据收集，确保在不同滚动位置都能捕获到数据
+        await performFinalCollection(scroller);
+
         endProcess("FINISHED");
     }
 
@@ -1996,6 +2036,12 @@ function extractDownloadLinksFromTurn(el) {
     return Array.from(new Set(links));
 }
 
+    /**
+     * 从DOM中捕获对话数据，包括用户和模型的消息、思考过程和附件
+     * 
+     * @param {HTMLElement} scroller - 滚动容器元素，默认为document
+     * @returns {Promise<void>} - 表示数据收集完成的Promise
+     */
     async function captureData(scroller = document) {
         // Scope the query to the scroller container to avoid capturing elements from other parts of the page
         const turns = scroller.querySelectorAll('ms-chat-turn');
@@ -2021,9 +2067,13 @@ function extractDownloadLinksFromTurn(el) {
             const turnId = getTurnId(turn);
             if (!turnId) continue;
 
-            const role = (turn.querySelector('[data-turn-role="Model"]') || turn.querySelector('[class*="model-prompt-container"]')) ? ROLE_GEMINI : ROLE_USER;
+            // 缓存DOM查询结果，减少重复查询
+            const modelRoleElement = turn.querySelector('[data-turn-role="Model"]') || turn.querySelector('[class*="model-prompt-container"]');
+            const role = modelRoleElement ? ROLE_GEMINI : ROLE_USER;
             const existing = collectedData.get(turnId) || { role };
-            const hasThoughtChunkNow = role === ROLE_GEMINI && !!turn.querySelector('ms-thought-chunk');
+            
+            const thoughtChunkElement = role === ROLE_GEMINI ? turn.querySelector('ms-thought-chunk') : null;
+            const hasThoughtChunkNow = !!thoughtChunkElement;
 
             if (processedTurnIds.has(turnId) && !(role === ROLE_GEMINI && !existing.thoughts && hasThoughtChunkNow)) continue;
 
@@ -2032,14 +2082,17 @@ function extractDownloadLinksFromTurn(el) {
             if (role === ROLE_GEMINI) {
                 const collapsedPanels = turn.querySelectorAll('mat-expansion-panel[aria-expanded="false"]');
                 for (const panel of collapsedPanels) {
-                    const headerText = panel.querySelector('.mat-expansion-panel-header-title')?.textContent?.toLowerCase() || '';
-                    const buttonText = panel.querySelector('button[aria-expanded="false"]')?.textContent?.toLowerCase() || '';
+                    // 缓存面板内的查询结果，减少重复查询
+                    const headerElement = panel.querySelector('.mat-expansion-panel-header-title');
+                    const headerText = headerElement?.textContent?.toLowerCase() || '';
+                    
+                    const buttonElement = panel.querySelector('button[aria-expanded="false"]');
+                    const buttonText = buttonElement?.textContent?.toLowerCase() || '';
 
                     if (headerText.includes('thought') || headerText.includes('thinking') ||
                         buttonText.includes('thought') || buttonText.includes('thinking')) {
-                        const expandButton = panel.querySelector('button[aria-expanded="false"]');
-                        if (expandButton) {
-                            expandButton.click();
+                        if (buttonElement) {
+                            buttonElement.click();
                             thoughtExpanded = true;
                         }
                     }
@@ -2899,17 +2952,32 @@ function extractDownloadLinksFromTurn(el) {
         }
     }
 
+    /**
+     * 执行最终数据收集，确保在不同滚动位置都能捕获到完整的数据
+     * 
+     * 这是一个重要的步骤，因为有些对话内容可能只在特定滚动位置可见。
+     * 通过在顶部、中间和底部三个关键位置进行数据收集，可以确保：
+     * 1. 所有对话内容都被正确捕获
+     * 2. 动态加载的内容不会被遗漏
+     * 3. 确保完整的上下文信息
+     * 
+     * @param {HTMLElement} scroller - 滚动容器元素
+     * @returns {Promise<void>} - 表示最终数据收集完成的Promise
+     */
     async function performFinalCollection(scroller) {
         dlog("执行最终数据收集...");
 
+        // 滚动到顶部收集数据
         scroller.scrollTop = 0;
         await sleep(FINAL_COLLECTION_DELAY_MS);
         await captureData(scroller);
 
+        // 滚动到中间收集数据
         scroller.scrollTop = scroller.scrollHeight / 2;
         await sleep(FINAL_COLLECTION_DELAY_MS);
         await captureData(scroller);
 
+        // 滚动到底部收集数据
         scroller.scrollTop = scroller.scrollHeight;
         await sleep(FINAL_COLLECTION_DELAY_MS);
         await captureData(scroller);
