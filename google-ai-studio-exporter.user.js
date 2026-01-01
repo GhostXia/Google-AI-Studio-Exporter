@@ -44,7 +44,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
         dlog('[AI Studio Exporter] typeof JSZip:', typeof JSZip);
         dlog('[AI Studio Exporter] unsafeWindow.JSZip:', typeof unsafeWindow !== 'undefined' ? unsafeWindow.JSZip : 'unsafeWindow not available');
 
-    // ==========================================
+    // ===================================
     // 0. 国际化 (i18n)
     // ==========================================
     const lang = navigator.language.startsWith('zh') ? 'zh' : 'en';
@@ -816,6 +816,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
     // ==========================================
     // 4. XHR 拦截器 (新增 - 核心功能)
     // ==========================================
+
     console.log("[AI Studio Exporter] 正在设置 XHR 拦截器...");
     
     const originalOpen = XMLHttpRequest.prototype.open;
@@ -872,18 +873,26 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                         json = [json];
                     }
 
-                    dlog(`[AI Studio Exporter] ${endpoint} intercepted. Size: ${rawText.length} chars.`);
-                    dlog(`[AI Studio Exporter] Captured data structure:`, json);
-                    capturedChatData = json;
-                    capturedTimestamp = Date.now();
-                    dlog(`[AI Studio Exporter] Data captured at: ${new Date(capturedTimestamp).toLocaleTimeString()}`);
+                    // 仅当此响应更完整（数据量更大）时才更新
+                    const shouldUpdate = !capturedChatData || 
+                        (JSON.stringify(json).length > JSON.stringify(capturedChatData).length);
                     
-                    // 保存到缓存，添加错误处理
-                    try {
-                        saveConversationDataToCache(json);
-                        dlog(`[AI Studio Exporter] Data saved to cache`);
-                    } catch (cacheErr) {
-                        dlog(`[AI Studio Exporter] Failed to save data to cache: ${cacheErr.message}`);
+                    if (shouldUpdate) {
+                        dlog(`[AI Studio Exporter] ${endpoint} intercepted. Size: ${rawText.length} chars.`);
+                        dlog(`[AI Studio Exporter] Captured data structure:`, json);
+                        capturedChatData = json;
+                        capturedTimestamp = Date.now();
+                        dlog(`[AI Studio Exporter] Data captured at: ${new Date(capturedTimestamp).toLocaleTimeString()}`);
+                        
+                        // 保存到缓存，添加错误处理
+                        try {
+                            saveConversationDataToCache(json);
+                            dlog(`[AI Studio Exporter] Data saved to cache`);
+                        } catch (cacheErr) {
+                            dlog(`[AI Studio Exporter] Failed to save data to cache: ${cacheErr.message}`);
+                        }
+                    } else {
+                        dlog(`[AI Studio Exporter] Skipped smaller response from ${endpoint}`);
                     }
                 } catch (err) {
                     dlog(`[AI Studio Exporter] XHR interceptor error: ${err.message}`);
