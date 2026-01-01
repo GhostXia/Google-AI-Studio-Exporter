@@ -4005,6 +4005,9 @@ function extractDownloadLinksFromTurn(el) {
         }
     });
 
+    // 立即创建入口按钮
+    createEntryButton();
+    // 设置定时器定期检查和创建入口按钮
     setInterval(createEntryButton, UPWARD_SCROLL_DELAY_MS * 2);
 
     // 导航处理：切换对话时清除缓存
