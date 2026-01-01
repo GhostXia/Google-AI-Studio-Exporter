@@ -1658,82 +1658,90 @@ function isResponseTurn(turn) {
     async function processXHRData() {
         dlog("[AI Studio Exporter] 开始处理 XHR 数据...");
         
-        // 检查 XHR 数据是否可用
-        if (!capturedChatData) {
-            dlog("[AI Studio Exporter] 没有捕获到 XHR 数据");
+        try {
+            // 检查 XHR 数据是否可用
+            if (!capturedChatData) {
+                dlog("[AI Studio Exporter] 没有捕获到 XHR 数据");
+                return false;
+            }
+            
+            const history = findHistoryRecursive(capturedChatData);
+            if (!history || history.length === 0) {
+                dlog("[AI Studio Exporter] 未找到聊天历史");
+                return false;
+            }
+            
+            dlog(`[AI Studio Exporter] 找到 ${history.length} 个聊天回合`);
+
+            let processedCount = 0;
+            const newTurnOrder = [];
+
+            for (let i = 0; i < history.length; i++) {
+                const turn = history[i];
+
+                if (!isTurn(turn)) {
+                    continue;
+                }
+
+                const isThinking = isThinkingTurn(turn);
+                const isResponse = isResponseTurn(turn);
+
+                let role = null;
+
+                if (isThinking) {
+                    if (!CONFIG.INCLUDE_THINKING) {
+                        continue;
+                    }
+                    role = ROLE_GEMINI;
+                } else if (isResponse) {
+                    if (!CONFIG.INCLUDE_MODEL) {
+                        continue;
+                    }
+                    role = ROLE_GEMINI;
+                } else {
+                    if (!CONFIG.INCLUDE_USER) {
+                        continue;
+                    }
+                    role = ROLE_USER;
+                }
+
+                const text = extractTextFromTurn(turn);
+                const turnId = `xhr_turn_${i}`;
+
+                const entry = {
+                    role: role,
+                    text: text,
+                    thoughts: null,
+                    attachments: []
+                };
+
+                if (isThinking && CONFIG.INCLUDE_THINKING) {
+                    entry.thoughts = text;
+                    entry.text = "";
+                }
+
+                collectedData.set(turnId, entry);
+                newTurnOrder.push(turnId);
+                processedCount++;
+
+                dlog(`[AI Studio Exporter] 处理回合 ${i + 1}/${history.length}: ${role}, 文本长度: ${text.length}`);
+            }
+
+            dlog(`[AI Studio Exporter] XHR 处理完成：成功处理 ${processedCount} 个回合`);
+
+            // Update global turnOrder
+            turnOrder.length = 0;
+            turnOrder.push(...newTurnOrder);
+            updateUI('SCROLLING', collectedData.size);
+
+            return true;
+        } catch (error) {
+            dlog(`[AI Studio Exporter] XHR 数据处理错误: ${error.message}`);
+            if (DEBUG) {
+                console.error('[AI Studio Exporter] XHR processing detailed error:', error);
+            }
             return false;
         }
-        
-        const history = findHistoryRecursive(capturedChatData);
-        if (!history || history.length === 0) {
-            dlog("[AI Studio Exporter] 未找到聊天历史");
-            return false;
-        }
-        
-        dlog(`[AI Studio Exporter] 找到 ${history.length} 个聊天回合`);
-
-        let processedCount = 0;
-        const newTurnOrder = [];
-
-        for (let i = 0; i < history.length; i++) {
-            const turn = history[i];
-
-            if (!isTurn(turn)) {
-                continue;
-            }
-
-            const isThinking = isThinkingTurn(turn);
-            const isResponse = isResponseTurn(turn);
-
-            let role = null;
-
-            if (isThinking) {
-                if (!CONFIG.INCLUDE_THINKING) {
-                    continue;
-                }
-                role = ROLE_GEMINI;
-            } else if (isResponse) {
-                if (!CONFIG.INCLUDE_MODEL) {
-                    continue;
-                }
-                role = ROLE_GEMINI;
-            } else {
-                if (!CONFIG.INCLUDE_USER) {
-                    continue;
-                }
-                role = ROLE_USER;
-            }
-
-            const text = extractTextFromTurn(turn);
-            const turnId = `xhr_turn_${i}`;
-
-            const entry = {
-                role: role,
-                text: text,
-                thoughts: null,
-                attachments: []
-            };
-
-            if (isThinking && CONFIG.INCLUDE_THINKING) {
-                entry.thoughts = text;
-                entry.text = "";
-            }
-
-            collectedData.set(turnId, entry);
-            newTurnOrder.push(turnId);
-            processedCount++;
-
-            dlog(`[AI Studio Exporter] 处理回合 ${i + 1}/${history.length}: ${role}, 文本长度: ${text.length}`);
-        }
-
-        dlog(`[AI Studio Exporter] XHR 处理完成：成功处理 ${processedCount} 个回合`);
-
-        // Update global turnOrder
-        turnOrder.length = 0;
-        turnOrder.push(...newTurnOrder);
-        updateUI('SCROLLING', collectedData.size);
-
-        return true;
     }
 
     /**
@@ -1766,17 +1774,17 @@ function isResponseTurn(turn) {
         // ========================================
         // 根据提取模式选择处理方式
         // ========================================
-        console.log(`[AI Studio Exporter] 当前配置的提取模式: ${CONFIG.EXTRACTION_MODE}`);
+        dlog(`[AI Studio Exporter] 当前配置的提取模式: ${CONFIG.EXTRACTION_MODE}`);
         
         if (CONFIG.EXTRACTION_MODE === 'xhr') {
-            console.log("[AI Studio Exporter] 使用 XHR 模式提取数据");
+            dlog("[AI Studio Exporter] 使用 XHR 模式提取数据");
             const success = await processXHRData();
 
             if (!success) {
-                console.log("[AI Studio Exporter] XHR 提取失败，回退到 DOM 模式");
+                dlog("[AI Studio Exporter] XHR 提取失败，回退到 DOM 模式");
                 updateUI('SCROLLING', 0);
             } else {
-                console.log("[AI Studio Exporter] XHR 提取成功，跳过 DOM 滚动");
+                dlog("[AI Studio Exporter] XHR 提取成功，跳过 DOM 滚动");
                 endProcess("FINISHED");
                 return;
             }
