@@ -905,7 +905,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
             }
         }
 
-        scan(turn.slice(0, 3));
+        scan(turn);
         return candidates.sort((a, b) => b.length - a.length)[0] || "";
     }
 
