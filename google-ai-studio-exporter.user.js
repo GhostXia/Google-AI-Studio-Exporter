@@ -2238,7 +2238,11 @@ function isResponseTurn(turn) {
     }
 
     function createEntryButton() {
-        if (document.getElementById('ai-entry-btn-v14')) return;
+        const existingBtn = document.getElementById('ai-entry-btn-v14');
+        if (existingBtn) {
+            entryButton = existingBtn;
+            return;
+        }
         const btn = document.createElement('button');
         btn.id = 'ai-entry-btn-v14';
         btn.className = 'ai-entry';
