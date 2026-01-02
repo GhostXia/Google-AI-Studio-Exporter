@@ -4005,8 +4005,14 @@ function extractDownloadLinksFromTurn(el) {
         }
     });
 
-    // 立即创建入口按钮
-    createEntryButton();
+    // 确保DOM加载完成后再创建按钮
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            createEntryButton();
+        });
+    } else {
+        createEntryButton();
+    }
     // 设置定时器定期检查和创建入口按钮
     setInterval(createEntryButton, UPWARD_SCROLL_DELAY_MS * 2);
 
