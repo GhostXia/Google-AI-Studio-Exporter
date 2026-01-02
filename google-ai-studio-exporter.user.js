@@ -1214,7 +1214,7 @@ const _JSZipRef = (typeof JSZip !== 'undefined') ? JSZip : null;
                     }
                 } catch (err) {
                     dlog(`[AI Studio Exporter] XHR interceptor error: ${err.message}`);
-                    if (DEBUG) {
+                    if (CONFIG_CONSTANTS.DEBUG) {
                         console.error('[AI Studio Exporter] XHR interceptor detailed error:', err);
                     }
                 }
@@ -1757,7 +1757,7 @@ function isResponseTurn(turn) {
                 return false;
             }
 
-            await new Promise(resolve => setTimeout(resolve, RAW_MODE_RENDER_DELAY_MS));
+            await new Promise(resolve => setTimeout(resolve, CONFIG_CONSTANTS.RAW_MODE_RENDER_DELAY_MS));
             return true;
 
         } catch (error) {
@@ -2144,7 +2144,7 @@ function isResponseTurn(turn) {
             setTimeout(() => {
                 document.addEventListener('mousedown', this.closeHandler, true);
                 document.addEventListener('keydown', this.escapeHandler, true);
-            }, RAW_MODE_MENU_DELAY_MS / 2);
+            }, CONFIG_CONSTANTS.RAW_MODE_MENU_DELAY_MS / 2);
         },
 
         hide() {
@@ -2585,7 +2585,7 @@ function isResponseTurn(turn) {
             return true;
         } catch (error) {
             dlog(`[AI Studio Exporter] XHR 数据处理错误: ${error.message}`);
-            if (DEBUG) {
+            if (CONFIG_CONSTANTS.DEBUG) {
                 console.error('[AI Studio Exporter] XHR processing detailed error:', error);
             }
             return false;
@@ -2660,7 +2660,7 @@ function isResponseTurn(turn) {
             dlog("当前已是原始模式，跳过切换");
         }
 
-        await sleep(RAW_MODE_RENDER_DELAY_MS);
+        await sleep(CONFIG_CONSTANTS.RAW_MODE_RENDER_DELAY_MS);
 
         let scroller = findRealScroller();
 
@@ -2669,7 +2669,7 @@ function isResponseTurn(turn) {
             dlog("尝试主动激活滚动容器...");
             // 先尝试滚动 window
             window.scrollBy(0, 1);
-            await sleep(SCROLL_DELAY_MS);
+            await sleep(CONFIG_CONSTANTS.SCROLL_DELAY_MS);
             scroller = findRealScroller();
         }
 
@@ -2679,7 +2679,7 @@ function isResponseTurn(turn) {
             const bubble = document.querySelector('ms-chat-turn');
             if (bubble) {
                 bubble.scrollIntoView({ behavior: 'instant' });
-                await sleep(RAW_MODE_MENU_DELAY_MS);
+                await sleep(CONFIG_CONSTANTS.RAW_MODE_MENU_DELAY_MS);
                 scroller = findRealScroller();
             }
         }
@@ -2707,7 +2707,7 @@ function isResponseTurn(turn) {
             firstButton.click();
 
             // 等待跳转和渲染
-            await sleep(UPWARD_SCROLL_DELAY_MS + RAW_MODE_RENDER_DELAY_MS);
+            await sleep(CONFIG_CONSTANTS.UPWARD_SCROLL_DELAY_MS + CONFIG_CONSTANTS.RAW_MODE_RENDER_DELAY_MS);
             dlog("跳转后 scrollTop:", scroller.scrollTop);
         } else {
             dlog("未找到滚动条按钮，使用备用方案...");
@@ -2721,29 +2721,29 @@ function isResponseTurn(turn) {
             let upwardAttempts = 0;
             const maxUpwardAttempts = 15; // 减少尝试次数
 
-            while (currentPos > BOTTOM_DETECTION_TOLERANCE * 10 && upwardAttempts < maxUpwardAttempts) {
+            while (currentPos > CONFIG_CONSTANTS.BOTTOM_DETECTION_TOLERANCE * 10 && upwardAttempts < maxUpwardAttempts) {
                 upwardAttempts++;
 
                 // 每次向上滚动一个视口高度
                 const scrollAmount = Math.min(window.innerHeight, currentPos);
                 scroller.scrollBy({ top: -scrollAmount, behavior: 'smooth' });
 
-                await sleep(UPWARD_SCROLL_DELAY_MS / 2);
+                await sleep(CONFIG_CONSTANTS.UPWARD_SCROLL_DELAY_MS / 2);
 
                 const newPos = scroller.scrollTop;
                 dlog(`向上滚动 ${upwardAttempts}/${maxUpwardAttempts}: ${currentPos} → ${newPos}`);
 
                 // 如果卡住了，尝试直接设置
-                if (Math.abs(newPos - currentPos) < MIN_SCROLL_DISTANCE_THRESHOLD * 2) {
+                if (Math.abs(newPos - currentPos) < CONFIG_CONSTANTS.MIN_SCROLL_DISTANCE_THRESHOLD * 2) {
                     dlog("检测到卡住，尝试直接设置...");
                     scroller.scrollTop = Math.max(0, currentPos - scrollAmount);
-                    await sleep(RAW_MODE_RENDER_DELAY_MS);
+                    await sleep(CONFIG_CONSTANTS.RAW_MODE_RENDER_DELAY_MS);
                 }
 
                 currentPos = scroller.scrollTop;
 
                 // 如果已经到顶部附近，退出
-                if (currentPos < BOTTOM_DETECTION_TOLERANCE * 10) {
+                if (currentPos < CONFIG_CONSTANTS.BOTTOM_DETECTION_TOLERANCE * 10) {
                     break;
                 }
             }
@@ -2752,18 +2752,18 @@ function isResponseTurn(turn) {
         // 最终确保到达顶部
         dlog("执行最终回到顶部，当前 scrollTop:", scroller.scrollTop);
         scroller.scrollTop = 0;
-        await sleep(UPWARD_SCROLL_DELAY_MS / 2);
+        await sleep(CONFIG_CONSTANTS.UPWARD_SCROLL_DELAY_MS / 2);
 
         // 再次确认
-        if (scroller.scrollTop > BOTTOM_DETECTION_TOLERANCE) {
+        if (scroller.scrollTop > CONFIG_CONSTANTS.BOTTOM_DETECTION_TOLERANCE) {
             scroller.scrollTo({ top: 0, behavior: 'instant' });
-            await sleep(UPWARD_SCROLL_DELAY_MS / 2);
+            await sleep(CONFIG_CONSTANTS.UPWARD_SCROLL_DELAY_MS / 2);
         }
 
         dlog("✓ 回到顶部完成，最终 scrollTop:", scroller.scrollTop);
 
         // 等待 DOM 稳定
-        await sleep(UPWARD_SCROLL_DELAY_MS - RAW_MODE_MENU_DELAY_MS);
+        await sleep(CONFIG_CONSTANTS.UPWARD_SCROLL_DELAY_MS - CONFIG_CONSTANTS.RAW_MODE_MENU_DELAY_MS);
 
 
 
@@ -2774,18 +2774,18 @@ function isResponseTurn(turn) {
         let scrollCount = 0;
 
         try {
-            while (isRunning && scrollCount < MAX_SCROLL_ATTEMPTS) {
+            while (isRunning && scrollCount < CONFIG_CONSTANTS.MAX_SCROLL_ATTEMPTS) {
                 scrollCount++;
                 await captureData(scroller);
                 updateUI('SCROLLING', collectedData.size);
 
-                scroller.scrollBy({ top: SCROLL_INCREMENT_INITIAL, behavior: 'smooth' });
+                scroller.scrollBy({ top: CONFIG_CONSTANTS.SCROLL_INCREMENT_INITIAL, behavior: 'smooth' });
 
-                await sleep(RAW_MODE_RENDER_DELAY_MS * 3);
+                await sleep(CONFIG_CONSTANTS.RAW_MODE_RENDER_DELAY_MS * 3);
 
                 const currentScroll = scroller.scrollTop;
 
-                if (Math.abs(currentScroll - lastScrollTop) <= MIN_SCROLL_DISTANCE_THRESHOLD) {
+                if (Math.abs(currentScroll - lastScrollTop) <= CONFIG_CONSTANTS.MIN_SCROLL_DISTANCE_THRESHOLD) {
                     stuckCount++;
                     if (stuckCount >= 3) {
                         dlog("判定到底", currentScroll);
@@ -2797,8 +2797,8 @@ function isResponseTurn(turn) {
                 lastScrollTop = currentScroll;
             }
 
-            if (scrollCount >= MAX_SCROLL_ATTEMPTS) {
-                dlog(`达到最大滚动尝试次数 (${MAX_SCROLL_ATTEMPTS})`);
+            if (scrollCount >= CONFIG_CONSTANTS.MAX_SCROLL_ATTEMPTS) {
+                dlog(`达到最大滚动尝试次数 (${CONFIG_CONSTANTS.MAX_SCROLL_ATTEMPTS})`);
             }
         } catch (e) {
             console.error(e);
@@ -2851,7 +2851,7 @@ function isResponseTurn(turn) {
 
         let el = bubble.parentElement;
         let depth = 0;
-        while (el && el !== document.body && depth < SCROLL_PARENT_SEARCH_DEPTH) {
+        while (el && el !== document.body && depth < CONFIG_CONSTANTS.SCROLL_PARENT_SEARCH_DEPTH) {
             const style = window.getComputedStyle(el);
             if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && el.scrollHeight >= el.clientHeight) {
                 return el;
@@ -2895,7 +2895,7 @@ function filterHref(href) {
 
     const lower = href.toLowerCase();
     if (lower.startsWith('http:') || lower.startsWith('https:')) return true;
-    if (ATTACHMENT_COMBINED_FALLBACK && lower.startsWith('blob:')) return true;
+    if (CONFIG_CONSTANTS.ATTACHMENT_COMBINED_FALLBACK && lower.startsWith('blob:')) return true;
     return false;
 }
 
@@ -3013,7 +3013,7 @@ function extractDownloadLinksFromTurn(el) {
             }
 
             if (thoughtExpanded) {
-                await sleep(THOUGHT_EXPAND_DELAY_MS);
+                await sleep(CONFIG_CONSTANTS.THOUGHT_EXPAND_DELAY_MS);
             }
 
             // Extract download links from the original turn before stripping UI-only elements
@@ -3031,7 +3031,7 @@ function extractDownloadLinksFromTurn(el) {
                     const r1 = img.getBoundingClientRect();
                     img.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
                     img.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-                    await sleep(SCROLL_DELAY_MS + RAW_MODE_MENU_DELAY_MS);
+                    await sleep(CONFIG_CONSTANTS.SCROLL_DELAY_MS + CONFIG_CONSTANTS.RAW_MODE_MENU_DELAY_MS);
                     const spans = turn.querySelectorAll('span.material-symbols-outlined, span.ms-button-icon-symbol');
                     spans.forEach(sp => {
                         const txt = (sp.textContent || '').trim().toLowerCase();
@@ -3042,7 +3042,7 @@ function extractDownloadLinksFromTurn(el) {
                             const cx1 = (r1.left + r1.right) / 2, cy1 = (r1.top + r1.bottom) / 2;
                             const cx2 = (r2.left + r2.right) / 2, cy2 = (r2.top + r2.bottom) / 2;
                             const dist = Math.hypot(cx1 - cx2, cy1 - cy2);
-                            if (dist < ATTACHMENT_MAX_DIST) {
+                            if (dist < CONFIG_CONSTANTS.ATTACHMENT_MAX_DIST) {
                                 const href = a?.getAttribute('href') || '';
                                 if (filterHref(href)) found.push(href);
                             }
@@ -3394,7 +3394,7 @@ function extractDownloadLinksFromTurn(el) {
                 if (cancelRequested && !signal.aborted) {
                     abortController.abort();
                 }
-            }, SCROLL_DELAY_MS * 4);
+            }, CONFIG_CONSTANTS.SCROLL_DELAY_MS * 4);
 
             const promises = Array.from(uniqueUrls).map(async (url, index) => {
                 if (signal.aborted) return;
@@ -3626,7 +3626,7 @@ function extractDownloadLinksFromTurn(el) {
 
     function generateAttachmentsMarkdown(item) {
         const links = Array.isArray(item.attachments) ? item.attachments : [];
-        if (links.length === 0 && !(ATTACHMENT_COMBINED_FALLBACK && item.attachmentScanAttempted)) {
+        if (links.length === 0 && !(CONFIG_CONSTANTS.ATTACHMENT_COMBINED_FALLBACK && item.attachmentScanAttempted)) {
             return '';
         }
         let listContent;
@@ -3681,7 +3681,7 @@ function extractDownloadLinksFromTurn(el) {
         const existing = getJSZip();
         if (existing) return existing;
 
-        if (DISABLE_SCRIPT_INJECTION) {
+        if (CONFIG_CONSTANTS.DISABLE_SCRIPT_INJECTION) {
             debugLog('Script injection disabled due to CSP. Use @require or choose text-only.', 'error');
             return null;
         }
@@ -3944,14 +3944,14 @@ function extractDownloadLinksFromTurn(el) {
         dlog("执行最终数据收集...");
 
         const currentScrollTop = scroller.scrollTop;
-        const isAtTop = currentScrollTop <= BOTTOM_DETECTION_TOLERANCE;
-        const isAtBottom = currentScrollTop >= scroller.scrollHeight - scroller.clientHeight - BOTTOM_DETECTION_TOLERANCE;
+        const isAtTop = currentScrollTop <= CONFIG_CONSTANTS.BOTTOM_DETECTION_TOLERANCE;
+        const isAtBottom = currentScrollTop >= scroller.scrollHeight - scroller.clientHeight - CONFIG_CONSTANTS.BOTTOM_DETECTION_TOLERANCE;
 
         // 如果不在顶部，先滚动到顶部
         if (!isAtTop) {
             dlog("滚动到顶部...");
             scroller.scrollTop = 0;
-            await sleep(FINAL_COLLECTION_DELAY_MS);
+            await sleep(CONFIG_CONSTANTS.FINAL_COLLECTION_DELAY_MS);
             await captureData(scroller);
         }
 
@@ -3959,7 +3959,7 @@ function extractDownloadLinksFromTurn(el) {
         if (!isAtBottom) {
             dlog("滚动到底部...");
             scroller.scrollTop = scroller.scrollHeight;
-            await sleep(FINAL_COLLECTION_DELAY_MS);
+            await sleep(CONFIG_CONSTANTS.FINAL_COLLECTION_DELAY_MS);
             await captureData(scroller);
         }
 
@@ -3967,7 +3967,7 @@ function extractDownloadLinksFromTurn(el) {
         if (!isAtTop || !isAtBottom) {
             dlog("再次在顶部收集...");
             scroller.scrollTop = 0;
-            await sleep(FINAL_COLLECTION_DELAY_MS);
+            await sleep(CONFIG_CONSTANTS.FINAL_COLLECTION_DELAY_MS);
             await captureData(scroller);
         }
 
@@ -4014,11 +4014,11 @@ function extractDownloadLinksFromTurn(el) {
         createEntryButton();
     }
     // 设置定时器定期检查和创建入口按钮
-    setInterval(createEntryButton, UPWARD_SCROLL_DELAY_MS * 2);
+    setInterval(createEntryButton, CONFIG_CONSTANTS.UPWARD_SCROLL_DELAY_MS * 2);
 
     // 导航处理：切换对话时清除缓存
     function clearCapturedData() {
-        if (Date.now() - capturedTimestamp < UPWARD_SCROLL_DELAY_MS * 2) {
+        if (Date.now() - capturedTimestamp < CONFIG_CONSTANTS.UPWARD_SCROLL_DELAY_MS * 2) {
             return;
         }
         capturedChatData = null;
